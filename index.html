@@ -80,6 +80,7 @@ input[type=file]{display:none}
 #prompt{font-size:31px;font-weight:800;text-align:center;line-height:1.18;letter-spacing:-.5px;
   text-shadow:0 0 26px rgba(34,227,255,.35)}
 #prompt .gap{color:var(--cyan);letter-spacing:1px}
+#promptSub{margin-top:8px;font-size:15px;color:var(--dim);font-weight:600;text-align:center;line-height:1.3}
 #prompt.pop{animation:pop .32s ease}
 @keyframes pop{0%{transform:scale(.86);opacity:0}60%{transform:scale(1.04)}100%{transform:scale(1);opacity:1}}
 
@@ -119,6 +120,9 @@ input[type=file]{display:none}
 #revEn{font-size:38px;font-weight:800;letter-spacing:-1px;margin-top:8px;line-height:1.15}
 #revEn .hl{color:var(--lime)}
 #revRu{font-size:20px;color:var(--dim);font-weight:600}
+#revRule{max-width:520px;margin-top:20px;padding:14px 16px;border-radius:14px;font-size:14.5px;line-height:1.5;
+  background:rgba(34,227,255,.09);border:1px solid rgba(34,227,255,.3);color:#cfe9f5;text-align:left}
+#revRule:empty{display:none}
 #revHint{margin-top:26px;font-size:12.5px;color:var(--dim)}
 
 #toast{position:absolute;z-index:7;left:50%;transform:translateX(-50%);font-weight:800;pointer-events:none;opacity:0}
@@ -213,6 +217,15 @@ code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:5px;font-siz
         <button data-lanes="3">3 — сложнее</button>
       </div>
     </div>
+    <div class="card" id="ruCard">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div style="min-width:0">
+          <div style="font-weight:700;font-size:15px">Перевод фразы</div>
+          <div class="small">Показывать русский текст под заданием</div>
+        </div>
+        <button class="btn sm ghost" id="ruBtn" style="flex:none">вкл</button>
+      </div>
+    </div>
     <div class="card">
       <div class="small" style="margin-bottom:8px">Темп</div>
       <div class="seg" id="paceSeg">
@@ -269,6 +282,7 @@ code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:5px;font-siz
     <div id="promptBox">
       <div id="promptLabel">переведи</div>
       <div id="prompt"></div>
+      <div id="promptSub"></div>
     </div>
     <div id="levelBanner"><div class="n"></div><div class="t">уровень</div></div>
     <div id="toast"></div>
@@ -276,6 +290,7 @@ code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:5px;font-siz
       <div id="revTitle">не то</div>
       <div id="revEn"></div>
       <div id="revRu"></div>
+      <div id="revRule"></div>
       <div id="revHint">нажми, чтобы продолжить</div>
     </div>
   </div>
@@ -358,9 +373,9 @@ const DEFAULTS = {
   turns: { words: 0, preps: 0 },
   deckSig: "", deckAt: "",   // signature of words.txt
   prepSig: "", prepAt: "",   // signature of prepositions.txt
-  win: { words: 3.0, preps: 2.0 },   // learned reaction window per deck, seconds
+  win: { words: 3.0, preps: 3.6 },   // learned reaction window per deck, seconds
   ach: {},                   // achievement id -> date unlocked
-  settings: { dir: "ru2en", lanes: 2, tts: true, mode: "words", pace: "auto" },
+  settings: { dir: "ru2en", lanes: 2, tts: true, mode: "words", pace: "auto", showRu: true },
   stats: { best: 0, bestPreps: 0, games: 0, answers: 0, correct: 0, days: 0, lastDay: "", cleanRuns: 0 }
 };
 
@@ -451,22 +466,30 @@ weight — вес
 whether — ли
 worth — стоящий`;
 
-const STARTER_PREPS = `___ Monday = on
-___ December = in
-___ night = at
-___ the morning = in
-___ 7 o'clock = at
-___ the table = on
-___ London = in
-___ home = at
-It depends ___ the weather = on
-I'm listening ___ music = to
-Look ___ this photo = at
-We're waiting ___ the bus = for
-I'm afraid ___ spiders = of
-She's interested ___ history = in
-He's good ___ maths = at
-I agree ___ you = with`;
+const STARTER_PREPS = `___ Monday = on | В понедельник | @on-day
+___ December = in | В декабре | @in-time
+___ night = at | Ночью | @at-clock
+___ the morning = in | Утром | @in-time
+___ 7 o'clock = at | В семь часов | @at-clock
+___ the table = on | На столе | @on-surface
+___ London = in | В Лондоне | @in-place
+___ home = at | Дома | @at-point
+It depends ___ the weather = on | Это зависит от погоды | @verb
+I'm listening ___ music = to | Я слушаю музыку | @verb
+Look ___ this photo = at | Посмотри на эту фотографию | @verb
+We're waiting ___ the bus = for | Мы ждём автобус | @verb
+I'm afraid ___ spiders = of | Я боюсь пауков | @adj
+She's interested ___ history = in | Она интересуется историей | @adj
+He's good ___ maths = at | Он хорош в математике | @adj
+I agree ___ you = with | Я с тобой согласен | @verb
+@on-day = Дни недели и конкретные даты — on: on Monday, on 5 July.
+@in-time = Месяцы, годы, века, сезоны и части суток — in: in December, in the morning.
+@at-clock = Точное время и точки на шкале суток — at: at 7 o'clock, at night.
+@in-place = Внутри объёма или границ территории — in: in the kitchen, in London.
+@on-surface = На поверхности или на линии — on: on the table, on page 42.
+@at-point = Точка или место по своей функции — at: at home, at work.
+@verb = Глагол требует именно этого предлога. Учится парой целиком.
+@adj = Прилагательное тянет свой предлог. Тоже только парой.`;
 
 let DB = null;
 let uid = Date.now();
@@ -521,19 +544,30 @@ function parseList(text){                       // words: "apple — яблок�
   return out;
 }
 
-function parsePreps(text){                      // prepositions: "___ Monday = on"
-  const out = [];
+/* prepositions: "фраза с ___ = ответ | перевод | @правило"
+   Rules are declared once as "@тег = текст" and resolved after the whole file
+   is read, so they may sit at the bottom where they do not clutter the list. */
+function parsePreps(text){
+  const rules = {}, rows = [];
   for(let line of String(text || "").split(/\r?\n/)){
     line = line.trim();
     if(!line || line.startsWith("#")) continue;
-    const i = line.lastIndexOf("=");
+    if(line.startsWith("@")){
+      const i = line.indexOf("=");
+      if(i > 1) rules[line.slice(1, i).trim()] = line.slice(i + 1).trim();
+      continue;
+    }
+    const parts = line.split("|").map(x => x.trim());
+    const head = parts[0];
+    const i = head.lastIndexOf("=");
     if(i < 1) continue;
-    const q = line.slice(0, i).trim();
-    const a = line.slice(i + 1).trim().toLowerCase();
+    const q = head.slice(0, i).trim();
+    const a = head.slice(i + 1).trim().toLowerCase();
     if(!q.includes("___") || !a || /\s/.test(a) || a.length > 12) continue;
-    out.push({ q, a });
+    rows.push({ q, a, ru: parts[1] || "", rule: parts[2] || "" });
   }
-  return out;
+  for(const r of rows) if(r.rule.startsWith("@")) r.rule = rules[r.rule.slice(1)] || "";
+  return rows;
 }
 
 function addWords(pairs){
@@ -553,9 +587,15 @@ function addPreps(items){
   let added = 0, updated = 0;
   for(const it of items){
     const k = it.q.toLowerCase();
-    if(idx.has(k)){ const p = idx.get(k); if(p.a !== it.a){ p.a = it.a; updated++; } }
-    else { const p = { id: ++uid, q: it.q, a: it.a, box: 0, due: 0, seen: false, ok: 0, err: 0 };
-           DB.preps.push(p); idx.set(k, p); added++; }
+    if(idx.has(k)){
+      const p = idx.get(k);
+      if(p.a !== it.a || p.ru !== it.ru || p.rule !== it.rule){
+        p.a = it.a; p.ru = it.ru; p.rule = it.rule; updated++;
+      }
+    } else {
+      const p = { id: ++uid, q: it.q, a: it.a, ru: it.ru, rule: it.rule, box: 0, due: 0, seen: false, ok: 0, err: 0 };
+      DB.preps.push(p); idx.set(k, p); added++;
+    }
   }
   save();
   return { added, updated };
@@ -641,7 +681,7 @@ const DECKS = {
     options: (p, n) => prepDistractors(p, n),
     speak: p => p.q.replace("___", p.a),
     revealMain: p => esc(p.q).replace("___", `<span class="hl">${esc(p.a)}</span>`),
-    revealSub: () => ""
+    revealSub: p => p.ru || ""
   }
 };
 function deck(){ return DECKS[DB.settings.mode] || DECKS.words; }
@@ -789,6 +829,9 @@ function renderMenu(){
     `<div class="small">Начато: ${seen} · Уверенно: <span class="ok">${strong}</span>` +
     (best ? ` · Рекорд: <span class="warn">${best}</span>` : "") + `</div>`;
 
+  $("#ruCard").style.display = isPreps ? "" : "none";
+  $("#ruBtn").textContent = DB.settings.showRu ? "вкл" : "выкл";
+  $("#ruBtn").style.color = DB.settings.showRu ? "var(--cyan)" : "var(--dim)";
   $("#dirCard").style.display = isPreps ? "none" : "";
   $("#laneCard").style.display = isPreps ? "none" : "";   // prepositions always use 3 gates
   $$("#dirSeg button").forEach(b => b.classList.toggle("on", b.dataset.dir === DB.settings.dir));
@@ -800,9 +843,13 @@ function renderMenu(){
 }
 function paceHint(){
   const w = baseWindow();
-  const what = DB.settings.mode === "preps" ? "фразу" : "слово";
+  if(DB.settings.mode === "preps"){
+    return `Около <b>${w.toFixed(1)} с</b> на короткую фразу и до <b>${(w * 1.75).toFixed(1)} с</b> на длинную — ` +
+           `чем больше текста, тем больше времени. Дальше быстрее с каждым уровнем, ` +
+           `а после забега подстраиваюсь под тебя.`;
+  }
   return `<b>${w.toFixed(1)} с</b> на первое решение, дальше быстрее с каждым уровнем. ` +
-         `После каждого забега подстраиваюсь под то, как быстро ты успеваешь прочитать ${what}.`;
+         `После каждого забега подстраиваюсь под то, как быстро ты успеваешь прочитать слово.`;
 }
 
 $("#modeSeg").addEventListener("click", e => {
@@ -824,6 +871,7 @@ $("#paceSeg").addEventListener("click", e => {
 $("#ttsBtn").addEventListener("click", () => {
   DB.settings.tts = !DB.settings.tts; save(); renderMenu(); $("#ttsMsg").textContent = "";
 });
+$("#ruBtn").addEventListener("click", () => { DB.settings.showRu = !DB.settings.showRu; save(); renderMenu(); });
 $("#syncBtn").addEventListener("click", async () => {
   $("#syncInfo").textContent = "Проверяю…";
   renderSync(await syncDeck(true)); renderMenu();
@@ -989,7 +1037,7 @@ const RUN = {
   gates: [], speed: 300, road: 0,
   score: 0, combo: 0, maxCombo: 0, lives: 3, level: 1,
   answers: 0, correct: 0, missed: [], revenge: false,
-  parts: [], shakeT: 0, lastMoveT: 0, fracs: []
+  parts: [], shakeT: 0, lastMoveT: 0, fracs: [], window: 3
 };
 
 function resize(){
@@ -1016,20 +1064,29 @@ function laneX(i){
    the same on a phone and a laptop. For words the window is calibrated from how fast
    the player actually decides — reading two English words takes far longer than
    reading "in / on / at". */
-const WIN_LIMITS = { words: [1.5, 4.2], preps: [1.1, 3.0] };
+const WIN_LIMITS = { words: [1.5, 4.2], preps: [2.2, 8.0] };
 function learnedWindow(){
   const m = DB.settings.mode;
   const d = DB.win && DB.win[m];
-  return typeof d === "number" ? d : (m === "preps" ? 2.0 : 3.0);
+  return typeof d === "number" ? d : (m === "preps" ? 3.6 : 3.0);
 }
 function baseWindow(){
   const p = DB.settings.pace;
   return learnedWindow() * (p === "calm" ? 1.25 : p === "hard" ? 0.78 : 1);
 }
-function reactionWindow(){
+/* A whole sentence plus its translation is far more reading than "___ Monday",
+   so each gate gets its own window scaled by how much text is on screen. */
+function lengthFactor(item){
+  if(!item || deck().key !== "preps") return 1;
+  const showRu = DB.settings.showRu && item.ru;
+  const chars = (item.q || "").length + (showRu ? item.ru.length * 0.5 : 0);
+  return Math.min(1.75, Math.max(0.8, 0.8 + (chars - 12) * 0.017));
+}
+function reactionWindow(item){
   const base = baseWindow();
-  const step = DB.settings.mode === "preps" ? 0.11 : 0.15;
-  return Math.max(base * 0.52, base - (RUN.level - 1) * step);
+  const step = DB.settings.mode === "preps" ? 0.12 : 0.15;
+  const byLevel = Math.max(base * (DB.settings.mode === "preps" ? 0.62 : 0.52), base - (RUN.level - 1) * step);
+  return byLevel * lengthFactor(item);
 }
 /* Record how much of the available window the decision actually ate. Storing the
    raw seconds would run away: a wider window lets you answer later, which then
@@ -1080,6 +1137,7 @@ function startRun(){
 }
 function stopRun(){
   RUN.state = "idle";
+  $("#promptSub").textContent = "";
   RUN.gates.forEach(g => g.el.remove());
   RUN.gates = [];
   $("#reveal").classList.remove("on");
@@ -1125,13 +1183,16 @@ function spawnGate(){
   el.style.transform = `translateY(${g.y}px)`;
   RUN.gates.push(g);
   RUN.lastMoveT = 0;
+  RUN.window = reactionWindow(item);
 
   $("#promptLabel").textContent = D.promptLabel();
   const p = $("#prompt");
   const q = D.prompt(item);
   p.innerHTML = esc(q).replace("___", '<span class="gap">•••</span>');
-  p.style.fontSize = q.length > 30 ? "20px" : q.length > 18 ? "24px" : "31px";
+  p.style.fontSize = q.length > 34 ? "19px" : q.length > 22 ? "23px" : q.length > 14 ? "27px" : "31px";
   p.classList.remove("pop"); void p.offsetWidth; p.classList.add("pop");
+  $("#promptSub").textContent =
+    (DB.settings.mode === "preps" && DB.settings.showRu && item.ru) ? item.ru : "";
 }
 function fitSize(text, lanes){
   const n = text.length;
@@ -1157,7 +1218,7 @@ function resolveGate(g){
 
   if(right){
     if(hadErrors >= 3) RUN.revenge = true;
-    if(RUN.lastMoveT > g.born) noteDecision((RUN.lastMoveT - g.born) / 1000, reactionWindow());
+    if(RUN.lastMoveT > g.born) noteDecision((RUN.lastMoveT - g.born) / 1000, RUN.window);
     RUN.correct++; DB.stats.correct++;
     RUN.combo++;
     RUN.maxCombo = Math.max(RUN.maxCombo, RUN.combo);
@@ -1200,10 +1261,14 @@ function showReveal(item){
   RUN.state = "reveal";
   $("#revEn").innerHTML = D.revealMain(item);
   $("#revRu").textContent = D.revealSub(item);
+  const rule = (DB.settings.mode === "preps" && item.rule) ? item.rule : "";
+  $("#revRule").textContent = rule;
+  $("#revHint").textContent = rule ? "прочитал — нажми, чтобы бежать дальше" : "нажми, чтобы продолжить";
   $("#reveal").classList.add("on");
   speak(D.speak(item));
   clearTimeout(showReveal._t);
-  showReveal._t = setTimeout(closeReveal, 2400);
+  // a rule needs reading; do not yank the screen away mid-sentence
+  showReveal._t = setTimeout(closeReveal, rule ? 9000 : 2400);
 }
 function closeReveal(){
   if(RUN.state !== "reveal") return;
@@ -1378,7 +1443,7 @@ function frame(now){
 
   if(RUN.state === "playing"){
     const travel = RUN.playerY + SPAWN_LEAD;
-    RUN.speed = travel / reactionWindow();
+    RUN.speed = travel / (RUN.window || reactionWindow(null));
     RUN.road += RUN.speed * dt;
 
     for(let i = RUN.gates.length - 1; i >= 0; i--){
@@ -1458,7 +1523,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 /* ---------- PWA + updates ---------- */
-const APP_VERSION = "1.3";
+const APP_VERSION = "1.4";
 $("#verNum").textContent = APP_VERSION;
 
 const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
