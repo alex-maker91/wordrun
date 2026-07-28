@@ -316,7 +316,7 @@ weather = погода
 challenge	вызов, испытание"></textarea>
       <div id="importPreview" class="small" style="margin:8px 0 12px"></div>
       <button class="btn" id="importBtn">Добавить в словарь</button>
-      <button class="btn ghost" id="fileBtn">📄 Загрузить файл (.txt / .csv)</button>
+      <button class="btn ghost" id="fileBtn">📄 Загрузить файл (.txt / .csv / копию .json)</button>
       <input type="file" id="fileInput" accept=".txt,.csv,.tsv,.json,text/plain">
       <p class="small">Если слово уже есть — оно не задвоится, перевод обновится.</p>
       <p class="small">Чтобы залить слова <b>с компьютера</b>: открой в репозитории файл
@@ -752,8 +752,24 @@ $("#fileInput").addEventListener("change", e => {
       try{
         const j = JSON.parse(txt);
         const arr = Array.isArray(j) ? j : (j.words || []);
+        // A full backup carries progress (box/due), not just pairs — offer to restore it.
+        const isBackup = !Array.isArray(j) && arr.length && typeof arr[0].box === "number";
+        if(isBackup){
+          const msg = `Это резервная копия: ${arr.length} слов вместе с прогрессом.\n\n` +
+                      `OK — восстановить всё и заменить текущие данные.\n` +
+                      `Отмена — взять только слова, свой прогресс сохранить.`;
+          if(confirm(msg)){
+            DB = Object.assign(JSON.parse(JSON.stringify(DEFAULTS)), j, {
+              settings: Object.assign({}, DEFAULTS.settings, j.settings || {}),
+              stats: Object.assign({}, DEFAULTS.stats, j.stats || {})
+            });
+            save(); renderWords(); renderMenu();
+            $("#importPreview").innerHTML = `<span class="ok">Восстановлено: ${DB.words.length} слов с прогрессом.</span>`;
+            return;
+          }
+        }
         txt = arr.map(w => `${w.en} — ${w.ru}`).join("\n");
-      }catch(err){ /* treat as text */ }
+      }catch(err){ /* treat as plain text */ }
     }
     $("#importArea").value = txt;
     $("#importArea").dispatchEvent(new Event("input"));
@@ -1206,7 +1222,8 @@ renderMenu();
 renderSync(null);
 syncDeck(false).then(res => { renderSync(res); renderMenu(); });
 requestAnimationFrame(frame);
-window.WR = { DB, save, parseList, pickWord, RUN, startRun, setLane, resolveGate };
+// debug handle; DB is a getter because restore replaces the whole object
+window.WR = { get DB(){ return DB; }, save, parseList, pickWord, RUN, startRun, setLane, resolveGate, syncDeck };
 </script>
 </body>
 </html>
