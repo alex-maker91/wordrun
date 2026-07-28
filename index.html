@@ -232,9 +232,18 @@ input[type=file]{display:none}
         <button data-lanes="3">3 — сложнее</button>
       </div>
     </div>
-    <div class="card" style="display:flex;align-items:center;justify-content:space-between">
-      <div><div style="font-weight:700;font-size:15px">Озвучка слов</div><div class="small">Читает английское слово вслух</div></div>
-      <button class="btn sm ghost" id="ttsBtn">вкл</button>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div style="min-width:0">
+          <div style="font-weight:700;font-size:15px">Озвучка слов</div>
+          <div class="small">Читает английское слово вслух</div>
+        </div>
+        <div style="display:flex;gap:8px;flex:none">
+          <button class="btn sm ghost" id="ttsTest">Проверить</button>
+          <button class="btn sm ghost" id="ttsBtn">вкл</button>
+        </div>
+      </div>
+      <div class="small" id="ttsMsg" style="margin-top:8px"></div>
     </div>
 
     <p class="small" style="margin-top:18px">
@@ -699,7 +708,29 @@ $("#laneSeg").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b) return;
   DB.settings.lanes = +b.dataset.lanes; save(); renderMenu();
 });
-$("#ttsBtn").addEventListener("click", () => { DB.settings.tts = !DB.settings.tts; save(); renderMenu(); });
+$("#ttsBtn").addEventListener("click", () => {
+  DB.settings.tts = !DB.settings.tts; save(); renderMenu();
+  $("#ttsMsg").textContent = "";
+});
+$("#ttsTest").addEventListener("click", () => {
+  const out = $("#ttsMsg");
+  if(!TTS.ok){ out.innerHTML = '<span class="err">Этот браузер не умеет синтез речи.</span>'; return; }
+  if(!DB.settings.tts){ out.innerHTML = '<span class="warn">Озвучка выключена — включи кнопкой справа.</span>'; return; }
+  unlockSpeech();
+  out.textContent = "Говорю…";
+  let started = false;
+  speak("weather", k => { if(k === "start") started = true; });
+  setTimeout(() => {
+    if(started || speechSynthesis.speaking || speechSynthesis.pending){
+      out.innerHTML = '<span class="ok">Звук пошёл.</span> Если не слышно — на айфоне это почти всегда ' +
+        'беззвучный режим: он глушит речь, даже когда громкость на максимуме. Переключи рычажок ' +
+        'на левом торце (или «Звонок» в Пункте управления) и нажми «Проверить» ещё раз.';
+    } else {
+      out.innerHTML = '<span class="warn">Не запустилось.</span> Нажми ещё раз — на iOS первая попытка ' +
+        'после запуска иногда уходит впустую.';
+    }
+  }, 700);
+});
 
 /* ---- words screen ---- */
 $("#wordsTabs").addEventListener("click", e => {
@@ -1084,22 +1115,55 @@ function burst(x, y, color, n){
     RUN.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60, life: .6 + Math.random() * .4, t: 0, c: color, r: 2 + Math.random() * 3 });
   }
 }
-let voice = null;
+/* Speech on iOS has three separate traps:
+   1. the very first utterance must come out of a real touch handler;
+   2. iOS lists voices it cannot actually use and fails silently on them;
+   3. the utterance object gets garbage-collected mid-sentence unless referenced.
+   All three are handled here. The physical silent switch is not fixable in JS. */
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const TTS = { ok: ("speechSynthesis" in window), voice: null, unlocked: false, held: null };
+
 function pickVoice(){
-  if(!("speechSynthesis" in window)) return;
+  if(!TTS.ok) return;
   const vs = speechSynthesis.getVoices();
-  voice = vs.find(v => /en[-_]US/i.test(v.lang) && /google|samantha|natural/i.test(v.name))
-       || vs.find(v => /^en/i.test(v.lang)) || null;
+  TTS.voice = IOS ? null                       // let iOS resolve the voice from lang
+    : (vs.find(v => /en[-_]US/i.test(v.lang) && /google|natural|samantha/i.test(v.name))
+       || vs.find(v => /^en/i.test(v.lang)) || null);
 }
-if("speechSynthesis" in window){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
-function speak(text){
-  if(!DB.settings.tts || !("speechSynthesis" in window)) return;
+if(TTS.ok){
+  pickVoice();
+  speechSynthesis.addEventListener("voiceschanged", pickVoice);
+}
+
+function unlockSpeech(){
+  if(!TTS.ok || TTS.unlocked) return;
+  TTS.unlocked = true;
   try{
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "en-US"; u.rate = .95; if(voice) u.voice = voice;
+    const u = new SpeechSynthesisUtterance("a");
+    u.volume = 0; u.rate = 2;
+    TTS.held = u;
     speechSynthesis.speak(u);
   }catch(e){}
+}
+document.addEventListener("pointerdown", unlockSpeech, { capture: true, once: true });
+document.addEventListener("touchend",   unlockSpeech, { capture: true, once: true });
+
+function speak(text, cb){
+  if(!DB.settings.tts || !TTS.ok) return;
+  const go = () => {
+    try{
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "en-US"; u.rate = .95;
+      if(TTS.voice) u.voice = TTS.voice;
+      TTS.held = u;                                  // keep alive so iOS cannot collect it
+      if(cb){ u.onstart = () => cb("start"); u.onerror = e => cb("error:" + (e.error || "?")); }
+      speechSynthesis.speak(u);
+    }catch(e){}
+  };
+  // cancel() immediately followed by speak() swallows the utterance on iOS
+  if(speechSynthesis.speaking || speechSynthesis.pending){ speechSynthesis.cancel(); setTimeout(go, 80); }
+  else go();
 }
 
 /* ---------- loop ---------- */
