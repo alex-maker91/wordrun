@@ -52,7 +52,7 @@ p.sub{color:var(--dim);font-size:14px;line-height:1.5;margin:4px 0 18px}
 .seg button{flex:1;padding:11px 8px;border:0;border-radius:10px;background:transparent;color:var(--dim);
   font-size:14px;font-weight:700;font-family:inherit;cursor:pointer}
 .seg button.on{background:rgba(34,227,255,.16);color:var(--cyan)}
-.seg.big button{padding:15px 8px;font-size:15.5px}
+.seg.big button{padding:15px 6px;font-size:14.5px}
 
 textarea{width:100%;min-height:190px;background:rgba(0,0,0,.35);color:var(--ink);border:1px solid var(--line);
   border-radius:14px;padding:14px;font-size:14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -176,6 +176,7 @@ code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:5px;font-siz
     <div class="seg big" id="modeSeg" style="margin-bottom:14px">
       <button data-mode="words">📚 Слова</button>
       <button data-mode="preps">🔗 Предлоги</button>
+      <button data-mode="mixed">🎲 Микс</button>
     </div>
 
     <div class="card" id="installHint" style="display:none;border-color:rgba(34,227,255,.35);background:rgba(34,227,255,.07)">
@@ -376,7 +377,7 @@ const DEFAULTS = {
   win: { words: 3.0, preps: 3.6 },   // learned reaction window per deck, seconds
   ach: {},                   // achievement id -> date unlocked
   settings: { dir: "ru2en", lanes: 2, tts: true, mode: "words", pace: "auto", showRu: true },
-  stats: { best: 0, bestPreps: 0, games: 0, answers: 0, correct: 0, days: 0, lastDay: "", cleanRuns: 0 }
+  stats: { best: 0, bestPreps: 0, bestMixed: 0, games: 0, answers: 0, correct: 0, days: 0, lastDay: "", cleanRuns: 0 }
 };
 
 const STARTER = `achieve — достигать
@@ -642,8 +643,12 @@ async function syncDeck(manual){
 /* =========================================================
    3. DECKS + SRS (Leitner)
    ========================================================= */
-const INTERVALS = [2, 6, 15, 40, 100, 260];
-const LEARN_CAP = 8;
+/* Intervals are in answers, not minutes. The first two were so short that a fresh
+   deck kept showing the same handful over and over — that is what made a run feel
+   samey. Wider early steps + a bigger learning pool + a no-repeat window fix it. */
+const INTERVALS = [4, 11, 26, 60, 140, 320];
+const LEARN_CAP = 14;
+const NO_REPEAT = 7;          // never show an item again within this many questions
 const PREP_POOL = ["in", "on", "at", "to", "for", "of", "from", "with", "about", "into", "by"];
 const CORE3 = ["in", "on", "at"];
 
@@ -664,7 +669,7 @@ const DECKS = {
     label: "Слова",
     items: () => DB.words,
     prompt: w => DB.settings.dir === "ru2en" ? w.ru : w.en,
-    promptLabel: () => DB.settings.dir === "ru2en" ? "переведи на английский" : "переведи на русский",
+    promptLabel: () => DB.settings.dir === "ru2en" ? "переведи на английский" : "переведи на русский",   // eslint-disable-line
     answer: w => shorten(DB.settings.dir === "ru2en" ? w.en : w.ru),
     options: (w, n) => wordDistractors(w, n).map(x => shorten(DB.settings.dir === "ru2en" ? x.en : x.ru)),
     speak: w => w.en,
@@ -684,38 +689,71 @@ const DECKS = {
     revealSub: p => p.ru || ""
   }
 };
+// Mixed simply forwards every call to whichever deck the item came from.
+DECKS.mixed = {
+  key: "mixed",
+  label: "Микс",
+  items: () => DB.words.concat(DB.preps),
+  prompt: i => byItem(i).prompt(i),
+  promptLabel: i => byItem(i).promptLabel(i),
+  answer: i => byItem(i).answer(i),
+  options: (i, n) => byItem(i).options(i, n),
+  speak: i => byItem(i).speak(i),
+  revealMain: i => byItem(i).revealMain(i),
+  revealSub: i => byItem(i).revealSub(i)
+};
 function deck(){ return DECKS[DB.settings.mode] || DECKS.words; }
-function turn(){ return DB.turns[deck().key] || 0; }
-function bumpTurn(){ DB.turns[deck().key] = turn() + 1; }
+function kindOf(item){ return (item && item.q !== undefined) ? "preps" : "words"; }
+function poolOf(kind){ return kind === "preps" ? DB.preps : DB.words; }
+function turnOf(kind){ return DB.turns[kind] || 0; }
+function byItem(i){ return kindOf(i) === "preps" ? DECKS.preps : DECKS.words; }
 
-function pickItem(){
-  const pool = deck().items();
+function pickFrom(kind){
+  const pool = poolOf(kind);
   if(!pool.length) return null;
-  const t = turn();
-  const unseen = pool.filter(w => !w.seen);
-  const due = pool.filter(w => w.seen && w.due <= t);
+  const t = turnOf(kind);
+  const fresh = x => !RUN.recent.includes(x.id);          // avoid immediate repeats
+  const pickBest = list => {
+    const clean = list.filter(fresh);
+    return (clean.length ? clean : list);
+  };
+
+  let unseen = pool.filter(w => !w.seen);
+  let due = pool.filter(w => w.seen && w.due <= t);
   const learning = pool.filter(w => w.seen && w.box < 3).length;
 
   let w = null;
-  if(unseen.length && learning < LEARN_CAP && (due.length === 0 || t % 3 === 0)){
-    w = unseen[Math.floor(Math.random() * unseen.length)]; w.seen = true;
+  if(unseen.length && learning < LEARN_CAP && (due.length === 0 || t % 2 === 0)){
+    const c = pickBest(unseen);
+    w = c[Math.floor(Math.random() * c.length)]; w.seen = true;
   } else if(due.length){
-    due.sort((a, b) => (a.box - b.box) || (a.due - b.due));
-    const head = due.slice(0, Math.min(4, due.length));
+    const c = pickBest(due).slice().sort((a, b) => (a.box - b.box) || (a.due - b.due));
+    const head = c.slice(0, Math.min(5, c.length));
     w = head[Math.floor(Math.random() * head.length)];
   } else if(unseen.length){
-    w = unseen[Math.floor(Math.random() * unseen.length)]; w.seen = true;
+    const c = pickBest(unseen);
+    w = c[Math.floor(Math.random() * c.length)]; w.seen = true;
   } else {
-    const s = pool.slice().sort((a, b) => a.due - b.due);
-    w = s[Math.floor(Math.random() * Math.min(4, s.length))];
+    const c = pickBest(pool).slice().sort((a, b) => a.due - b.due);
+    w = c[Math.floor(Math.random() * Math.min(5, c.length))];
   }
   return w;
 }
+function pickItem(){
+  const m = DB.settings.mode;
+  if(m === "mixed"){
+    const first = Math.random() < 0.5 ? "preps" : "words";
+    const second = first === "preps" ? "words" : "preps";
+    return pickFrom(first) || pickFrom(second);
+  }
+  return pickFrom(m === "preps" ? "preps" : "words");
+}
 function grade(w, right){
-  bumpTurn();
+  const kind = kindOf(w);
+  DB.turns[kind] = turnOf(kind) + 1;
   if(right){ w.ok++; w.box = Math.min(5, w.box + 1); }
   else { w.err++; w.box = 0; }
-  w.due = turn() + INTERVALS[w.box];
+  w.due = turnOf(kind) + INTERVALS[w.box];
 }
 
 function wordDistractors(target, n){
@@ -812,28 +850,32 @@ document.addEventListener("click", e => {
 });
 
 function renderMenu(){
-  const isPreps = DB.settings.mode === "preps";
-  $("#tagline").textContent = isPreps
-    ? "Три предлога, одна правильная дверь. Гоняем до автоматизма."
-    : "Беги, выбирай правильные ворота, учи свои слова.";
-  $$("#modeSeg button").forEach(b => b.classList.toggle("on", b.dataset.mode === DB.settings.mode));
+  const mode = DB.settings.mode;
+  const isPreps = mode === "preps", isMixed = mode === "mixed";
+  $("#tagline").textContent = isMixed
+    ? "Слова и предлоги вперемешку — так не привыкаешь к одному типу вопроса."
+    : isPreps
+      ? "Три предлога, одна правильная дверь. Гоняем до автоматизма."
+      : "Беги, выбирай правильные ворота, учи свои слова.";
+  $$("#modeSeg button").forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
 
-  const pool = isPreps ? DB.preps : DB.words;
+  const pool = isMixed ? DB.words.concat(DB.preps) : (isPreps ? DB.preps : DB.words);
   const seen = pool.filter(w => w.seen).length;
   const strong = pool.filter(w => w.box >= 4).length;
-  const best = isPreps ? DB.stats.bestPreps : DB.stats.best;
+  const best = isMixed ? DB.stats.bestMixed : isPreps ? DB.stats.bestPreps : DB.stats.best;
   $("#deckInfo").innerHTML =
     `<div style="font-weight:700;font-size:15px;margin-bottom:6px">` +
-    (isPreps ? `${pool.length} ${plural(pool.length,"фраза","фразы","фраз")} с предлогами`
-             : `В словаре ${pool.length} ${plural(pool.length,"слово","слова","слов")}`) + `</div>` +
+    (isMixed ? `${DB.words.length} ${plural(DB.words.length,"слово","слова","слов")} и ${DB.preps.length} ${plural(DB.preps.length,"фраза","фразы","фраз")}`
+     : isPreps ? `${pool.length} ${plural(pool.length,"фраза","фразы","фраз")} с предлогами`
+               : `В словаре ${pool.length} ${plural(pool.length,"слово","слова","слов")}`) + `</div>` +
     `<div class="small">Начато: ${seen} · Уверенно: <span class="ok">${strong}</span>` +
     (best ? ` · Рекорд: <span class="warn">${best}</span>` : "") + `</div>`;
 
-  $("#ruCard").style.display = isPreps ? "" : "none";
+  $("#ruCard").style.display = (isPreps || isMixed) ? "" : "none";
   $("#ruBtn").textContent = DB.settings.showRu ? "вкл" : "выкл";
   $("#ruBtn").style.color = DB.settings.showRu ? "var(--cyan)" : "var(--dim)";
   $("#dirCard").style.display = isPreps ? "none" : "";
-  $("#laneCard").style.display = isPreps ? "none" : "";   // prepositions always use 3 gates
+  $("#laneCard").style.display = (isPreps || isMixed) ? "none" : "";   // those modes always use 3 gates
   $$("#dirSeg button").forEach(b => b.classList.toggle("on", b.dataset.dir === DB.settings.dir));
   $$("#laneSeg button").forEach(b => b.classList.toggle("on", +b.dataset.lanes === DB.settings.lanes));
   $$("#paceSeg button").forEach(b => b.classList.toggle("on", b.dataset.pace === DB.settings.pace));
@@ -842,6 +884,11 @@ function renderMenu(){
   $("#ttsBtn").style.color = DB.settings.tts ? "var(--cyan)" : "var(--dim)";
 }
 function paceHint(){
+  if(DB.settings.mode === "mixed"){
+    return `Слову даю <b>${baseWindow("words").toFixed(1)} с</b>, фразе с предлогом — ` +
+           `от <b>${baseWindow("preps").toFixed(1)}</b> до <b>${(baseWindow("preps") * 1.75).toFixed(1)} с</b> ` +
+           `по длине. Каждый тип подстраивается отдельно.`;
+  }
   const w = baseWindow();
   if(DB.settings.mode === "preps"){
     return `Около <b>${w.toFixed(1)} с</b> на короткую фразу и до <b>${(w * 1.75).toFixed(1)} с</b> на длинную — ` +
@@ -1003,7 +1050,7 @@ function renderStats(){
     ${deckStats(DB.words, "Словарь")}
     ${deckStats(DB.preps, "Предлоги")}
     <div class="card"><div class="small">Забегов: <b>${DB.stats.games}</b> · Ответов: <b>${DB.stats.answers}</b>
-      · Рекорд слова: <b>${DB.stats.best}</b> · Рекорд предлоги: <b>${DB.stats.bestPreps}</b></div></div>
+      · Рекорды: слова <b>${DB.stats.best}</b>, предлоги <b>${DB.stats.bestPreps}</b>, микс <b>${DB.stats.bestMixed || 0}</b></div></div>
 
     <h2>Награды <span class="small">${got} из ${ACHS.length}</span></h2>
     <div class="card" style="padding:0;overflow:hidden">
@@ -1037,7 +1084,8 @@ const RUN = {
   gates: [], speed: 300, road: 0,
   score: 0, combo: 0, maxCombo: 0, lives: 3, level: 1,
   answers: 0, correct: 0, missed: [], revenge: false,
-  parts: [], shakeT: 0, lastMoveT: 0, fracs: [], window: 3
+  parts: [], shakeT: 0, lastMoveT: 0, window: 3, fatal: false,
+  recent: [], fracs: { words: [], preps: [] }, byKind: { words: {a:0,c:0}, preps: {a:0,c:0} }
 };
 
 function resize(){
@@ -1065,64 +1113,68 @@ function laneX(i){
    the player actually decides — reading two English words takes far longer than
    reading "in / on / at". */
 const WIN_LIMITS = { words: [1.5, 4.2], preps: [2.2, 8.0] };
-function learnedWindow(){
-  const m = DB.settings.mode;
-  const d = DB.win && DB.win[m];
-  return typeof d === "number" ? d : (m === "preps" ? 3.6 : 3.0);
+function currentKind(){ return DB.settings.mode === "preps" ? "preps" : "words"; }
+function learnedWindow(kind){
+  const d = DB.win && DB.win[kind];
+  return typeof d === "number" ? d : (kind === "preps" ? 3.6 : 3.0);
 }
-function baseWindow(){
+function baseWindow(kind){
   const p = DB.settings.pace;
-  return learnedWindow() * (p === "calm" ? 1.25 : p === "hard" ? 0.78 : 1);
+  return learnedWindow(kind || currentKind()) * (p === "calm" ? 1.25 : p === "hard" ? 0.78 : 1);
 }
 /* A whole sentence plus its translation is far more reading than "___ Monday",
    so each gate gets its own window scaled by how much text is on screen. */
 function lengthFactor(item){
-  if(!item || deck().key !== "preps") return 1;
+  if(!item || kindOf(item) !== "preps") return 1;
   const showRu = DB.settings.showRu && item.ru;
   const chars = (item.q || "").length + (showRu ? item.ru.length * 0.5 : 0);
   return Math.min(1.75, Math.max(0.8, 0.8 + (chars - 12) * 0.017));
 }
 function reactionWindow(item){
-  const base = baseWindow();
-  const step = DB.settings.mode === "preps" ? 0.12 : 0.15;
-  const byLevel = Math.max(base * (DB.settings.mode === "preps" ? 0.62 : 0.52), base - (RUN.level - 1) * step);
+  const kind = item ? kindOf(item) : currentKind();
+  const base = baseWindow(kind);
+  const step = kind === "preps" ? 0.12 : 0.15;
+  const byLevel = Math.max(base * (kind === "preps" ? 0.62 : 0.52), base - (RUN.level - 1) * step);
   return byLevel * lengthFactor(item);
 }
 /* Record how much of the available window the decision actually ate. Storing the
    raw seconds would run away: a wider window lets you answer later, which then
    argues for an even wider window. The fraction is stable. */
-function noteDecision(seconds, window){
+function noteDecision(seconds, window, kind){
   if(!(seconds > 0.15 && window > 0)) return;
-  RUN.fracs.push(Math.min(1.2, seconds / window));
+  RUN.fracs[kind].push(Math.min(1.2, seconds / window));
 }
 function tunePace(){
-  const m = DB.settings.mode;
-  if(RUN.fracs.length < 4) return;
-  const s = RUN.fracs.slice().sort((a, b) => a - b);
-  const med = s[Math.floor(s.length / 2)];
-  const acc = RUN.answers ? RUN.correct / RUN.answers : 1;
-  let w = learnedWindow();
-  if(med > 0.72 || acc < 0.6) w *= 1.12;              // cutting it fine — give more room
-  else if(med < 0.45 && acc > 0.85) w *= 0.93;        // coasting — tighten up
-  const [lo, hi] = WIN_LIMITS[m];
-  DB.win[m] = Math.round(Math.min(hi, Math.max(lo, w)) * 100) / 100;
+  for(const kind of ["words", "preps"]){
+    const f = RUN.fracs[kind];
+    const seen = RUN.byKind[kind];
+    if(f.length < 4) continue;
+    const s = f.slice().sort((a, b) => a - b);
+    const med = s[Math.floor(s.length / 2)];
+    const acc = seen.a ? seen.c / seen.a : 1;
+    let w = learnedWindow(kind);
+    if(med > 0.72 || acc < 0.6) w *= 1.12;            // cutting it fine — give more room
+    else if(med < 0.45 && acc > 0.85) w *= 0.93;      // coasting — tighten up
+    const [lo, hi] = WIN_LIMITS[kind];
+    DB.win[kind] = Math.round(Math.min(hi, Math.max(lo, w)) * 100) / 100;
+  }
 }
 
 /* ---------- start / stop ---------- */
 function startRun(){
   const pool = deck().items();
   if(pool.length < 3){
-    alert(DB.settings.mode === "preps"
-      ? "Мало фраз с предлогами — обнови общий словарь."
-      : "Нужно минимум 3 слова, чтобы были варианты ответа.");
-    show(DB.settings.mode === "preps" ? "s-menu" : "s-words");
+    alert(DB.settings.mode === "words"
+      ? "Нужно минимум 3 слова, чтобы были варианты ответа."
+      : "Мало материала — обнови общий словарь.");
+    show(DB.settings.mode === "words" ? "s-words" : "s-menu");
     return;
   }
   markDay();
   show("s-game");
   resize();
 
-  RUN.lanes = DB.settings.mode === "preps" ? 3 : Math.min(DB.settings.lanes, 3);
+  RUN.lanes = (DB.settings.mode === "preps" || DB.settings.mode === "mixed") ? 3 : Math.min(DB.settings.lanes, 3);
   RUN.state = "playing";
   RUN.gates.forEach(g => g.el.remove());
   RUN.gates = []; RUN.parts = [];
@@ -1130,7 +1182,9 @@ function startRun(){
   RUN.px = laneX(RUN.lane); RUN.targetX = RUN.px;
   RUN.score = 0; RUN.combo = 0; RUN.maxCombo = 0; RUN.lives = 3; RUN.level = 1;
   RUN.answers = 0; RUN.correct = 0; RUN.missed = []; RUN.revenge = false;
-  RUN.shakeT = 0; RUN.lastMoveT = 0; RUN.fracs = [];
+  RUN.shakeT = 0; RUN.lastMoveT = 0; RUN.fatal = false; RUN.recent = [];
+  RUN.fracs = { words: [], preps: [] };
+  RUN.byKind = { words: {a:0,c:0}, preps: {a:0,c:0} };
   $("#reveal").classList.remove("on");
   updHUD();
   spawnGate();
@@ -1184,15 +1238,18 @@ function spawnGate(){
   RUN.gates.push(g);
   RUN.lastMoveT = 0;
   RUN.window = reactionWindow(item);
+  RUN.recent.push(item.id);
+  const keep = Math.min(NO_REPEAT, Math.max(2, Math.floor(D.items().length / 3)));
+  while(RUN.recent.length > keep) RUN.recent.shift();
 
-  $("#promptLabel").textContent = D.promptLabel();
+  $("#promptLabel").textContent = D.promptLabel(item);
   const p = $("#prompt");
   const q = D.prompt(item);
   p.innerHTML = esc(q).replace("___", '<span class="gap">•••</span>');
   p.style.fontSize = q.length > 34 ? "19px" : q.length > 22 ? "23px" : q.length > 14 ? "27px" : "31px";
   p.classList.remove("pop"); void p.offsetWidth; p.classList.add("pop");
   $("#promptSub").textContent =
-    (DB.settings.mode === "preps" && DB.settings.showRu && item.ru) ? item.ru : "";
+    (kindOf(item) === "preps" && DB.settings.showRu && item.ru) ? item.ru : "";
 }
 function fitSize(text, lanes){
   const n = text.length;
@@ -1213,13 +1270,15 @@ function resolveGate(g){
   }
 
   const hadErrors = g.item.err;
+  const kind = kindOf(g.item);
   RUN.answers++; DB.stats.answers++;
+  RUN.byKind[kind].a++;
   grade(g.item, right);
 
   if(right){
     if(hadErrors >= 3) RUN.revenge = true;
-    if(RUN.lastMoveT > g.born) noteDecision((RUN.lastMoveT - g.born) / 1000, RUN.window);
-    RUN.correct++; DB.stats.correct++;
+    if(RUN.lastMoveT > g.born) noteDecision((RUN.lastMoveT - g.born) / 1000, RUN.window, kind);
+    RUN.correct++; DB.stats.correct++; RUN.byKind[kind].c++;
     RUN.combo++;
     RUN.maxCombo = Math.max(RUN.maxCombo, RUN.combo);
     const mult = 1 + Math.floor(RUN.combo / 5);
@@ -1242,8 +1301,8 @@ function resolveGate(g){
     RUN.shakeT = 0.4;
     playerEl.classList.remove("hit"); void playerEl.offsetWidth; playerEl.classList.add("hit");
     if(navigator.vibrate) try{ navigator.vibrate(60); }catch(e){}
-    if(RUN.lives <= 0) setTimeout(gameOver, 260);
-    else showReveal(g.item);
+    // The mistake that ends the run is the one worth explaining — never skip it.
+    showReveal(g.item, RUN.lives <= 0);
   }
   updHUD();
   save();
@@ -1256,19 +1315,23 @@ function showLevel(n){
   if(navigator.vibrate) try{ navigator.vibrate([12, 40, 12]); }catch(e){}
 }
 
-function showReveal(item){
+function showReveal(item, fatal){
   const D = deck();
   RUN.state = "reveal";
+  RUN.fatal = !!fatal;
+  $("#revTitle").textContent = fatal ? "последняя ошибка" : "не то";
   $("#revEn").innerHTML = D.revealMain(item);
   $("#revRu").textContent = D.revealSub(item);
-  const rule = (DB.settings.mode === "preps" && item.rule) ? item.rule : "";
+  const rule = (kindOf(item) === "preps" && item.rule) ? item.rule : "";
   $("#revRule").textContent = rule;
-  $("#revHint").textContent = rule ? "прочитал — нажми, чтобы бежать дальше" : "нажми, чтобы продолжить";
+  $("#revHint").textContent = fatal
+    ? "нажми, чтобы посмотреть итоги"
+    : (rule ? "прочитал — нажми, чтобы бежать дальше" : "нажми, чтобы продолжить");
   $("#reveal").classList.add("on");
   speak(D.speak(item));
   clearTimeout(showReveal._t);
   // a rule needs reading; do not yank the screen away mid-sentence
-  showReveal._t = setTimeout(closeReveal, rule ? 9000 : 2400);
+  showReveal._t = setTimeout(closeReveal, rule ? 9000 : (fatal ? 4200 : 2400));
 }
 function closeReveal(){
   if(RUN.state !== "reveal") return;
@@ -1276,6 +1339,7 @@ function closeReveal(){
   $("#reveal").classList.remove("on");
   RUN.gates.forEach(g => g.el.remove());
   RUN.gates = [];
+  if(RUN.fatal){ RUN.fatal = false; gameOver(); return; }
   RUN.state = "playing";
   spawnGate();
 }
@@ -1285,10 +1349,10 @@ function gameOver(){
   RUN.state = "over";
   RUN.gates.forEach(g => g.el.remove()); RUN.gates = [];
   const D = deck();
-  const isPreps = DB.settings.mode === "preps";
+  const mode = DB.settings.mode;
+  const bestKey = mode === "mixed" ? "bestMixed" : mode === "preps" ? "bestPreps" : "best";
   DB.stats.games++;
-  if(isPreps) DB.stats.bestPreps = Math.max(DB.stats.bestPreps, RUN.score);
-  else DB.stats.best = Math.max(DB.stats.best, RUN.score);
+  DB.stats[bestKey] = Math.max(DB.stats[bestKey] || 0, RUN.score);
   if(RUN.answers >= 10 && RUN.correct === RUN.answers) DB.stats.cleanRuns++;
   tunePace();
   save();
@@ -1299,7 +1363,7 @@ function gameOver(){
   });
 
   const acc = RUN.answers ? Math.round(RUN.correct / RUN.answers * 100) : 0;
-  const best = isPreps ? DB.stats.bestPreps : DB.stats.best;
+  const best = DB.stats[bestKey];
   $("#ovScore").textContent = RUN.score;
   $("#ovBest").textContent = best;
   $("#ovAcc").textContent = acc + "%";
@@ -1523,7 +1587,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 /* ---------- PWA + updates ---------- */
-const APP_VERSION = "1.4";
+const APP_VERSION = "1.5";
 $("#verNum").textContent = APP_VERSION;
 
 const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
