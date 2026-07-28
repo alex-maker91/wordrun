@@ -125,6 +125,37 @@ input[type=file]{display:none}
 #revRule:empty{display:none}
 #revHint{margin-top:26px;font-size:12.5px;color:var(--dim)}
 
+#stopBtn{position:absolute;z-index:6;left:16px;bottom:calc(20px + env(safe-area-inset-bottom));
+  width:64px;height:64px;border-radius:22px;border:2px solid rgba(34,227,255,.45);
+  background:rgba(34,227,255,.12);color:var(--ink);font-size:13px;font-weight:800;font-family:inherit;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;
+  backdrop-filter:blur(3px)}
+#stopBtn .ic{font-size:19px;line-height:1}
+#stopBtn.off{opacity:.25;border-color:var(--line);background:rgba(255,255,255,.04)}
+#stopBtn:active{transform:scale(.93)}
+
+#freeze{position:absolute;inset:0;z-index:5;display:none;align-items:center;justify-content:center;
+  pointer-events:none;background:rgba(34,227,255,.10)}
+#freeze.on{display:flex}
+#freeze b{font-size:70px;font-weight:900;color:var(--cyan);text-shadow:0 0 40px rgba(34,227,255,.7)}
+
+#choice{position:absolute;inset:0;z-index:9;display:none;flex-direction:column;align-items:center;
+  justify-content:center;gap:6px;padding:24px;text-align:center;background:rgba(8,10,20,.93);backdrop-filter:blur(6px)}
+#choice.on{display:flex}
+#choice .lv{font-size:12px;letter-spacing:4px;color:var(--dim);text-transform:uppercase;font-weight:800}
+#choice .big{font-size:52px;font-weight:900;letter-spacing:-2px;
+  background:linear-gradient(100deg,var(--cyan),var(--mag));-webkit-background-clip:text;background-clip:text;color:transparent}
+#choice .q{font-size:16px;color:var(--ink);font-weight:700;margin:6px 0 22px}
+.crow{display:flex;gap:12px;width:100%;max-width:420px}
+.cbtn{flex:1;padding:20px 10px;border-radius:20px;border:2px solid rgba(255,255,255,.18);
+  background:rgba(255,255,255,.06);color:var(--ink);font-family:inherit;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:8px}
+.cbtn:active{transform:scale(.97)}
+.cbtn .ic{font-size:30px;line-height:1}
+.cbtn .nm{font-size:15px;font-weight:800}
+.cbtn .ds{font-size:11.5px;color:var(--dim);line-height:1.35}
+.cbtn.have{border-color:rgba(34,227,255,.4)}
+
 #toast{position:absolute;z-index:7;left:50%;transform:translateX(-50%);font-weight:800;pointer-events:none;opacity:0}
 @keyframes floatUp{0%{opacity:1;transform:translate(-50%,0) scale(.8)}100%{opacity:0;transform:translate(-50%,-70px) scale(1.25)}}
 
@@ -228,13 +259,13 @@ code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:5px;font-siz
       </div>
     </div>
     <div class="card">
-      <div class="small" style="margin-bottom:8px">Темп</div>
-      <div class="seg" id="paceSeg">
-        <button data-pace="calm">Спокойный</button>
-        <button data-pace="auto">Подстроить</button>
-        <button data-pace="hard">Резкий</button>
+      <div class="small" style="margin-bottom:8px">Сложность</div>
+      <div class="seg" id="diffSeg">
+        <button data-diff="easy">Лёгкий</button>
+        <button data-diff="normal">Средний</button>
+        <button data-diff="hard">Сложный</button>
       </div>
-      <div class="small" id="paceInfo" style="margin-top:8px"></div>
+      <div class="small" id="diffInfo" style="margin-top:8px"></div>
     </div>
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -286,6 +317,19 @@ code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:5px;font-siz
       <div id="promptSub"></div>
     </div>
     <div id="levelBanner"><div class="n"></div><div class="t">уровень</div></div>
+    <div id="freeze"><b id="freezeN">2</b></div>
+    <button id="stopBtn"><span class="ic">⏸</span><span id="stopN">0</span></button>
+    <div id="choice">
+      <div class="lv">уровень</div>
+      <div class="big" id="chLvl">2</div>
+      <div class="q">Что берём?</div>
+      <div class="crow">
+        <button class="cbtn" data-pick="life"><span class="ic">❤︎</span>
+          <span class="nm">+1 жизнь</span><span class="ds">запас прочности</span></button>
+        <button class="cbtn" data-pick="stop"><span class="ic">⏸</span>
+          <span class="nm">+1 стоп</span><span class="ds">заморозить ворота на 3 секунды, когда нужно подумать</span></button>
+      </div>
+    </div>
     <div id="toast"></div>
     <div id="reveal">
       <div id="revTitle">не то</div>
@@ -376,7 +420,7 @@ const DEFAULTS = {
   prepSig: "", prepAt: "",   // signature of prepositions.txt
   win: { words: 3.0, preps: 3.6 },   // learned reaction window per deck, seconds
   ach: {},                   // achievement id -> date unlocked
-  settings: { dir: "ru2en", lanes: 2, tts: true, mode: "words", pace: "auto", showRu: true },
+  settings: { dir: "ru2en", lanes: 2, tts: true, mode: "words", diff: "normal", showRu: true },
   stats: { best: 0, bestPreps: 0, bestMixed: 0, games: 0, answers: 0, correct: 0, days: 0, lastDay: "", cleanRuns: 0 }
 };
 
@@ -810,6 +854,8 @@ const ACHS = [
   { id:"know20", ico:"📗", name:"Двадцатка",     desc:"20 слов в верхней коробке",            test:() => strongCount("words") >= 20 },
   { id:"know100",ico:"📚", name:"Сотня",         desc:"100 слов в верхней коробке",           test:() => strongCount("words") >= 100 },
   { id:"prep30", ico:"🔗", name:"Предложный",    desc:"30 предлогов в верхней коробке",       test:() => strongCount("preps") >= 30 },
+  { id:"prepAll",ico:"🏆", name:"Все предлоги", desc:"Вся колода предлогов в верхней коробке",
+    test:() => DB.preps.length >= 50 && strongCount("preps") >= DB.preps.length },
   { id:"week",   ico:"📅", name:"Неделя",        desc:"7 дней подряд",                        test:() => DB.stats.days >= 7 },
   { id:"lib",    ico:"🗄", name:"Библиотекарь",  desc:"300 слов в словаре",                   test:() => DB.words.length >= 300 },
   { id:"hard",   ico:"🧠", name:"Обратный ход",  desc:"Забег Рус → Англ без единой ошибки",   test:r => r && r.mode === "words" && DB.settings.dir === "ru2en" && r.answers >= 10 && r.correct === r.answers }
@@ -868,8 +914,10 @@ function renderMenu(){
     (isMixed ? `${DB.words.length} ${plural(DB.words.length,"слово","слова","слов")} и ${DB.preps.length} ${plural(DB.preps.length,"фраза","фразы","фраз")}`
      : isPreps ? `${pool.length} ${plural(pool.length,"фраза","фразы","фраз")} с предлогами`
                : `В словаре ${pool.length} ${plural(pool.length,"слово","слова","слов")}`) + `</div>` +
-    `<div class="small">Начато: ${seen} · Уверенно: <span class="ok">${strong}</span>` +
-    (best ? ` · Рекорд: <span class="warn">${best}</span>` : "") + `</div>`;
+    `<div class="bar"><i style="width:${strong / (pool.length || 1) * 100}%;background:var(--lime)"></i>` +
+    `<i style="width:${(seen - strong) / (pool.length || 1) * 100}%;background:var(--gold)"></i></div>` +
+    `<div class="small">Пройдено <span class="ok">${strong}</span> из ${pool.length} · в работе ${Math.max(0, seen - strong)}` +
+    (best ? ` · рекорд <span class="warn">${best}</span>` : "") + `</div>`;
 
   $("#ruCard").style.display = (isPreps || isMixed) ? "" : "none";
   $("#ruBtn").textContent = DB.settings.showRu ? "вкл" : "выкл";
@@ -878,25 +926,20 @@ function renderMenu(){
   $("#laneCard").style.display = (isPreps || isMixed) ? "none" : "";   // those modes always use 3 gates
   $$("#dirSeg button").forEach(b => b.classList.toggle("on", b.dataset.dir === DB.settings.dir));
   $$("#laneSeg button").forEach(b => b.classList.toggle("on", +b.dataset.lanes === DB.settings.lanes));
-  $$("#paceSeg button").forEach(b => b.classList.toggle("on", b.dataset.pace === DB.settings.pace));
-  $("#paceInfo").innerHTML = paceHint();
+  $$("#diffSeg button").forEach(b => b.classList.toggle("on", b.dataset.diff === DB.settings.diff));
+  $("#diffInfo").innerHTML = diffHint();
   $("#ttsBtn").textContent = DB.settings.tts ? "вкл" : "выкл";
   $("#ttsBtn").style.color = DB.settings.tts ? "var(--cyan)" : "var(--dim)";
 }
-function paceHint(){
-  if(DB.settings.mode === "mixed"){
-    return `Слову даю <b>${baseWindow("words").toFixed(1)} с</b>, фразе с предлогом — ` +
-           `от <b>${baseWindow("preps").toFixed(1)}</b> до <b>${(baseWindow("preps") * 1.75).toFixed(1)} с</b> ` +
-           `по длине. Каждый тип подстраивается отдельно.`;
-  }
-  const w = baseWindow();
-  if(DB.settings.mode === "preps"){
-    return `Около <b>${w.toFixed(1)} с</b> на короткую фразу и до <b>${(w * 1.75).toFixed(1)} с</b> на длинную — ` +
-           `чем больше текста, тем больше времени. Дальше быстрее с каждым уровнем, ` +
-           `а после забега подстраиваюсь под тебя.`;
-  }
-  return `<b>${w.toFixed(1)} с</b> на первое решение, дальше быстрее с каждым уровнем. ` +
-         `После каждого забега подстраиваюсь под то, как быстро ты успеваешь прочитать слово.`;
+function diffHint(){
+  const c = diffCfg();
+  const m = DB.settings.mode;
+  const t = m === "preps" ? `${c.preps.toFixed(1)} с на фразу`
+          : m === "mixed" ? `${c.words.toFixed(1)} с на слово, ${c.preps.toFixed(1)} с на фразу`
+                          : `${c.words.toFixed(1)} с на слово`;
+  return `<b>${t}</b> · старт с ${c.lives} ${plural(c.lives,"жизнью","жизнями","жизнями")}. ` +
+         `Скорость не растёт по ходу забега — вместо этого каждые ${LEVEL_EVERY} правильных ` +
+         `даётся выбор награды. Длинным фразам добавляется фора на чтение, скорость дороги при этом одна и та же.`;
 }
 
 $("#modeSeg").addEventListener("click", e => {
@@ -911,9 +954,9 @@ $("#laneSeg").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b) return;
   DB.settings.lanes = +b.dataset.lanes; save(); renderMenu();
 });
-$("#paceSeg").addEventListener("click", e => {
+$("#diffSeg").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b) return;
-  DB.settings.pace = b.dataset.pace; save(); renderMenu();
+  DB.settings.diff = b.dataset.diff; save(); renderMenu();
 });
 $("#ttsBtn").addEventListener("click", () => {
   DB.settings.tts = !DB.settings.tts; save(); renderMenu(); $("#ttsMsg").textContent = "";
@@ -1085,7 +1128,8 @@ const RUN = {
   score: 0, combo: 0, maxCombo: 0, lives: 3, level: 1,
   answers: 0, correct: 0, missed: [], revenge: false,
   parts: [], shakeT: 0, lastMoveT: 0, window: 3, fatal: false,
-  recent: [], fracs: { words: [], preps: [] }, byKind: { words: {a:0,c:0}, preps: {a:0,c:0} }
+  recent: [], byKind: { words: {a:0,c:0}, preps: {a:0,c:0} },
+  stops: 0, frozen: 0, mastered: 0
 };
 
 function resize(){
@@ -1112,53 +1156,37 @@ function laneX(i){
    the same on a phone and a laptop. For words the window is calibrated from how fast
    the player actually decides — reading two English words takes far longer than
    reading "in / on / at". */
-const WIN_LIMITS = { words: [1.5, 4.2], preps: [2.2, 8.0] };
+/* Three fixed difficulties. The clock does not move during a run: no ramp with
+   level, no self-tuning. The only thing that varies is a head start for long
+   phrases, and that is done by spawning them higher — the road itself always
+   scrolls at exactly one speed. */
+const DIFF = {
+  easy:   { label: "Лёгкий",  words: 4.2, preps: 5.2, lives: 3 },
+  normal: { label: "Средний", words: 3.2, preps: 4.0, lives: 2 },
+  hard:   { label: "Сложный", words: 2.3, preps: 2.9, lives: 1 }
+};
+const MAX_LIVES = 5;
+const LEVEL_EVERY = 10;          // correct answers per level, and per reward choice
+function diffCfg(){ return DIFF[DB.settings.diff] || DIFF.normal; }
 function currentKind(){ return DB.settings.mode === "preps" ? "preps" : "words"; }
-function learnedWindow(kind){
-  const d = DB.win && DB.win[kind];
-  return typeof d === "number" ? d : (kind === "preps" ? 3.6 : 3.0);
-}
-function baseWindow(kind){
-  const p = DB.settings.pace;
-  return learnedWindow(kind || currentKind()) * (p === "calm" ? 1.25 : p === "hard" ? 0.78 : 1);
-}
+function baseWindow(kind){ return diffCfg()[kind || currentKind()]; }
 /* A whole sentence plus its translation is far more reading than "___ Monday",
    so each gate gets its own window scaled by how much text is on screen. */
-function lengthFactor(item){
-  if(!item || kindOf(item) !== "preps") return 1;
+// Extra seconds of reading for a long sentence, delivered as distance, not as
+// a slower road: the gate simply starts further above the screen.
+function extraLead(item){
+  if(!item || kindOf(item) !== "preps") return 0;
   const showRu = DB.settings.showRu && item.ru;
   const chars = (item.q || "").length + (showRu ? item.ru.length * 0.5 : 0);
-  return Math.min(1.75, Math.max(0.8, 0.8 + (chars - 12) * 0.017));
+  return Math.min(2.2, Math.max(0, (chars - 14) * 0.045));
 }
 function reactionWindow(item){
-  const kind = item ? kindOf(item) : currentKind();
-  const base = baseWindow(kind);
-  const step = kind === "preps" ? 0.12 : 0.15;
-  const byLevel = Math.max(base * (kind === "preps" ? 0.62 : 0.52), base - (RUN.level - 1) * step);
-  return byLevel * lengthFactor(item);
+  return baseWindow(item ? kindOf(item) : currentKind());
 }
 /* Record how much of the available window the decision actually ate. Storing the
    raw seconds would run away: a wider window lets you answer later, which then
    argues for an even wider window. The fraction is stable. */
-function noteDecision(seconds, window, kind){
-  if(!(seconds > 0.15 && window > 0)) return;
-  RUN.fracs[kind].push(Math.min(1.2, seconds / window));
-}
-function tunePace(){
-  for(const kind of ["words", "preps"]){
-    const f = RUN.fracs[kind];
-    const seen = RUN.byKind[kind];
-    if(f.length < 4) continue;
-    const s = f.slice().sort((a, b) => a - b);
-    const med = s[Math.floor(s.length / 2)];
-    const acc = seen.a ? seen.c / seen.a : 1;
-    let w = learnedWindow(kind);
-    if(med > 0.72 || acc < 0.6) w *= 1.12;            // cutting it fine — give more room
-    else if(med < 0.45 && acc > 0.85) w *= 0.93;      // coasting — tighten up
-    const [lo, hi] = WIN_LIMITS[kind];
-    DB.win[kind] = Math.round(Math.min(hi, Math.max(lo, w)) * 100) / 100;
-  }
-}
+// (the old self-tuning pace controller lived here; difficulty is explicit now)
 
 /* ---------- start / stop ---------- */
 function startRun(){
@@ -1180,17 +1208,20 @@ function startRun(){
   RUN.gates = []; RUN.parts = [];
   RUN.lane = Math.floor((RUN.lanes - 1) / 2);
   RUN.px = laneX(RUN.lane); RUN.targetX = RUN.px;
-  RUN.score = 0; RUN.combo = 0; RUN.maxCombo = 0; RUN.lives = 3; RUN.level = 1;
+  RUN.score = 0; RUN.combo = 0; RUN.maxCombo = 0; RUN.lives = diffCfg().lives; RUN.level = 1;
   RUN.answers = 0; RUN.correct = 0; RUN.missed = []; RUN.revenge = false;
   RUN.shakeT = 0; RUN.lastMoveT = 0; RUN.fatal = false; RUN.recent = [];
-  RUN.fracs = { words: [], preps: [] };
   RUN.byKind = { words: {a:0,c:0}, preps: {a:0,c:0} };
+  RUN.stops = 0; RUN.frozen = 0; RUN.mastered = 0;
   $("#reveal").classList.remove("on");
   updHUD();
   spawnGate();
 }
 function stopRun(){
   RUN.state = "idle";
+  RUN.frozen = 0;
+  $("#freeze").classList.remove("on");
+  $("#choice").classList.remove("on");
   $("#promptSub").textContent = "";
   RUN.gates.forEach(g => g.el.remove());
   RUN.gates = [];
@@ -1233,7 +1264,13 @@ function spawnGate(){
     `<div class="cell" style="font-size:${fitSize(o.text, RUN.lanes)}px">${esc(o.text)}</div>`).join("");
   shakeEl.appendChild(el);
 
-  const g = { el, y: -(GATE_H + SPAWN_LEAD), h: GATE_H, item, opts, resolved: false, born: performance.now() };
+  // resolved gates normally scroll away on their own; drop stragglers so a pause
+  // or a fast streak cannot leave a pile of dead nodes on screen
+  const dead = RUN.gates.filter(x => x.resolved);
+  while(dead.length > 2){ const d = dead.shift(); d.el.remove(); RUN.gates.splice(RUN.gates.indexOf(d), 1); }
+
+  const lead = SPAWN_LEAD + extraLead(item) * (RUN.speed || 300);
+  const g = { el, y: -(GATE_H + lead), h: GATE_H, item, opts, resolved: false, born: performance.now() };
   el.style.transform = `translateY(${g.y}px)`;
   RUN.gates.push(g);
   RUN.lastMoveT = 0;
@@ -1270,6 +1307,7 @@ function resolveGate(g){
   }
 
   const hadErrors = g.item.err;
+  const boxBefore = g.item.box;
   const kind = kindOf(g.item);
   RUN.answers++; DB.stats.answers++;
   RUN.byKind[kind].a++;
@@ -1277,7 +1315,6 @@ function resolveGate(g){
 
   if(right){
     if(hadErrors >= 3) RUN.revenge = true;
-    if(RUN.lastMoveT > g.born) noteDecision((RUN.lastMoveT - g.born) / 1000, RUN.window, kind);
     RUN.correct++; DB.stats.correct++; RUN.byKind[kind].c++;
     RUN.combo++;
     RUN.maxCombo = Math.max(RUN.maxCombo, RUN.combo);
@@ -1286,11 +1323,11 @@ function resolveGate(g){
     RUN.score += pts;
     burst(laneX(chosen), RUN.playerY, "#4ef08a", 22);
     toast("+" + pts + (mult > 1 ? " ×" + mult : ""), "#4ef08a");
-    if(RUN.combo > 0 && RUN.combo % 10 === 0 && RUN.lives < 3){ RUN.lives++; toast("+❤︎", "#ff4fd8"); }
     if(g.item.box <= 2) speak(D.speak(g.item));
+    if(boxBefore < 5 && g.item.box === 5) RUN.mastered++;
 
-    const lvl = 1 + Math.floor(RUN.correct / 12);
-    if(lvl > RUN.level){ RUN.level = lvl; showLevel(lvl); }
+    const lvl = 1 + Math.floor(RUN.correct / LEVEL_EVERY);
+    if(lvl > RUN.level){ RUN.level = lvl; showChoice(lvl); }
 
     setTimeout(() => { if(RUN.state === "playing") spawnGate(); }, 90);
   } else {
@@ -1307,6 +1344,35 @@ function resolveGate(g){
   updHUD();
   save();
 }
+
+function showChoice(n){
+  RUN.state = "choice";
+  $("#chLvl").textContent = n;
+  $("#choice").classList.add("on");
+}
+function pickReward(kind){
+  if(kind === "life") RUN.lives = Math.min(MAX_LIVES, RUN.lives + 1);
+  else RUN.stops++;
+  $("#choice").classList.remove("on");
+  RUN.state = "playing";
+  updHUD();
+  save();
+  spawnGate();
+}
+$("#choice").addEventListener("click", e => {
+  const b = e.target.closest("[data-pick]");
+  if(b && RUN.state === "choice") pickReward(b.dataset.pick);
+});
+
+// Freeze the road for a few seconds without spending a life.
+function useStop(){
+  if(RUN.state !== "playing" || RUN.stops < 1 || RUN.frozen > 0) return;
+  RUN.stops--;
+  RUN.frozen = 3;
+  $("#freeze").classList.add("on");
+  updHUD();
+}
+$("#stopBtn").addEventListener("pointerdown", e => { e.stopPropagation(); useStop(); });
 
 function showLevel(n){
   const b = $("#levelBanner");
@@ -1354,7 +1420,6 @@ function gameOver(){
   DB.stats.games++;
   DB.stats[bestKey] = Math.max(DB.stats[bestKey] || 0, RUN.score);
   if(RUN.answers >= 10 && RUN.correct === RUN.answers) DB.stats.cleanRuns++;
-  tunePace();
   save();
 
   const got = checkAchievements({
@@ -1368,8 +1433,10 @@ function gameOver(){
   $("#ovBest").textContent = best;
   $("#ovAcc").textContent = acc + "%";
   $("#ovMax").textContent = RUN.level + " / ×" + RUN.maxCombo;
-  $("#overSub").textContent = (RUN.score >= best && RUN.score > 0)
-    ? "Новый рекорд. Красиво." : `${RUN.correct} из ${RUN.answers}. Уровень ${RUN.level}.`;
+  const learned = RUN.mastered
+    ? ` Освоено за забег: ${RUN.mastered} ${plural(RUN.mastered,"штука","штуки","штук")}.` : "";
+  $("#overSub").textContent = ((RUN.score >= best && RUN.score > 0)
+    ? "Новый рекорд. Красиво." : `${RUN.correct} из ${RUN.answers}. Уровень ${RUN.level}.`) + learned;
 
   $("#achBlock").innerHTML = got.length
     ? `<h2>Новые награды</h2><div class="card" style="padding:0;overflow:hidden">` +
@@ -1420,8 +1487,10 @@ window.addEventListener("keydown", e => {
 /* ---------- effects ---------- */
 function updHUD(){
   $("#score").textContent = RUN.score;
-  $("#lives").textContent = "❤︎".repeat(Math.max(0, RUN.lives)) + "♡".repeat(Math.max(0, 3 - RUN.lives));
+  $("#lives").textContent = RUN.lives > 0 ? "❤︎".repeat(Math.min(MAX_LIVES, RUN.lives)) : "♡";
   $("#lvlChip").textContent = "УРОВЕНЬ " + RUN.level;
+  $("#stopN").textContent = RUN.stops;
+  $("#stopBtn").classList.toggle("off", RUN.stops < 1);
   const c = $("#combo");
   c.textContent = RUN.combo >= 3 ? `комбо ×${RUN.combo}` : "";
   c.style.fontSize = RUN.combo >= 10 ? "15px" : "12px";
@@ -1505,7 +1574,11 @@ function frame(now){
   const dt = Math.min(.05, (now - last) / 1000);
   last = now;
 
-  if(RUN.state === "playing"){
+  if(RUN.state === "playing" && RUN.frozen > 0){
+    RUN.frozen = Math.max(0, RUN.frozen - dt);
+    $("#freezeN").textContent = Math.ceil(RUN.frozen);
+    if(RUN.frozen === 0) $("#freeze").classList.remove("on");
+  } else if(RUN.state === "playing"){
     const travel = RUN.playerY + SPAWN_LEAD;
     RUN.speed = travel / (RUN.window || reactionWindow(null));
     RUN.road += RUN.speed * dt;
@@ -1587,7 +1660,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 /* ---------- PWA + updates ---------- */
-const APP_VERSION = "1.5";
+const APP_VERSION = "1.6";
 $("#verNum").textContent = APP_VERSION;
 
 const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
@@ -1643,7 +1716,8 @@ syncDeck(false).then(res => { renderSync(res); renderMenu(); });
 requestAnimationFrame(frame);
 window.WR = {
   get DB(){ return DB; }, save, parseList, parsePreps, pickItem, RUN, startRun, setLane,
-  syncDeck, checkAchievements, ACHS, baseWindow, reactionWindow, deck, resolveGate, spawnGate, tunePace
+  syncDeck, checkAchievements, ACHS, baseWindow, reactionWindow, deck, resolveGate, spawnGate,
+  extraLead, diffCfg, useStop, pickReward
 };
 </script>
 </body>
