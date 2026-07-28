@@ -236,7 +236,16 @@ code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:5px;font-siz
       <div class="small" id="ttsMsg" style="margin-top:8px"></div>
     </div>
 
-    <p class="small" style="margin-top:18px">
+    <div class="card" style="margin-top:18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div style="min-width:0">
+          <div style="font-weight:700;font-size:15px">Версия <span id="verNum"></span></div>
+          <div class="small" id="updMsg">Обновляется само при запуске с интернетом</div>
+        </div>
+        <button class="btn sm ghost" id="updBtn" style="flex:none">Обновить</button>
+      </div>
+    </div>
+    <p class="small">
       Слова и прогресс хранятся только на этом устройстве — никуда не отправляются.
       Раз в месяц имеет смысл нажать «Сохранить резервную копию» в разделе «Мои слова».
     </p>
@@ -1448,14 +1457,54 @@ document.addEventListener("visibilitychange", () => {
   if(document.hidden && RUN.state === "playing"){ stopRun(); show("s-menu"); }
 });
 
-/* ---------- PWA ---------- */
+/* ---------- PWA + updates ---------- */
+const APP_VERSION = "1.3";
+$("#verNum").textContent = APP_VERSION;
+
 const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 if(!standalone && IOS){ const h = $("#installHint"); if(h) h.style.display = ""; }
+
+let swReg = null, reloadedOnce = false;
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(e => console.warn("sw", e));
+    navigator.serviceWorker.register("./sw.js", { scope: "./" })
+      .then(reg => {
+        swReg = reg;
+        reg.update();                                     // ask on every launch
+        setInterval(() => reg.update(), 30 * 60 * 1000);
+      })
+      .catch(e => console.warn("sw", e));
+  });
+  // A new worker taking over means new code is ready — pick it up right away.
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if(reloadedOnce) return;
+    reloadedOnce = true;
+    location.reload();
+  });
+  // iOS resumes a home-screen app without a real page load; check when it wakes.
+  document.addEventListener("visibilitychange", () => {
+    if(!document.hidden && swReg) swReg.update();
   });
 }
+
+// Last-resort button: drop every cache and worker, then reload from the network.
+// localStorage lives in a different store, so words and progress survive.
+$("#updBtn").addEventListener("click", async () => {
+  const msg = $("#updMsg");
+  msg.textContent = "Обновляю…";
+  try{
+    if("caches" in window){
+      const ks = await caches.keys();
+      await Promise.all(ks.map(k => caches.delete(k)));
+    }
+    if("serviceWorker" in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+  }catch(e){ console.warn("update", e); }
+  reloadedOnce = true;                                    // stop controllerchange racing us
+  location.replace(location.pathname + "?u=" + Date.now());
+});
 
 /* ---------- boot ---------- */
 resize();
