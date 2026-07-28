@@ -1,11 +1,13 @@
 /* WordRun service worker.
    Network-first so a new version reaches the phone as soon as it is online,
    cache fallback so the game still runs in the metro. */
-const VERSION = "wordrun-2026-07-28b";
+const VERSION = "wordrun-2026-07-28c";
 const SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
+  "./words.txt",
+  "./prepositions.txt",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/maskable-512.png",

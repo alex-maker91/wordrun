@@ -1,0 +1,166 @@
+# Тренажёр предлогов WordRun.
+# Формат: фраза с ___ на месте пропуска, знак =, правильный предлог.
+# Например:   ___ Monday = on
+# Правь этот файл на компьютере — телефон подтянет изменения сам.
+
+# ---------- ВРЕМЯ: дни и даты → on ----------
+___ Monday = on
+___ Friday evening = on
+___ 5 July = on
+___ my birthday = on
+___ Christmas Day = on
+___ New Year's Eve = on
+___ the first day of spring = on
+___ Saturday morning = on
+
+# ---------- ВРЕМЯ: месяцы, годы, сезоны, части дня → in ----------
+___ December = in
+___ July = in
+___ summer = in
+___ winter = in
+___ 2026 = in
+___ the 21st century = in
+___ the morning = in
+___ the afternoon = in
+___ the evening = in
+___ the 1990s = in
+See you ___ ten minutes = in
+He'll be back ___ two weeks = in
+
+# ---------- ВРЕМЯ: точки на часах и исключения → at ----------
+___ night = at
+___ noon = at
+___ midnight = at
+___ 7 o'clock = at
+___ half past six = at
+___ the weekend = at
+___ lunchtime = at
+___ the moment = at
+___ the same time = at
+___ dawn = at
+
+# ---------- МЕСТО: внутри чего-то → in ----------
+___ the kitchen = in
+___ London = in
+___ Russia = in
+___ the car = in
+___ a taxi = in
+___ my pocket = in
+___ the garden = in
+___ hospital = in
+
+# ---------- МЕСТО: на поверхности, транспорт, страницы → on ----------
+___ the bus = on
+___ the plane = on
+___ the train = on
+___ the table = on
+___ the wall = on
+___ page 42 = on
+___ the second floor = on
+___ the ceiling = on
+___ the island = on
+
+# ---------- МЕСТО: точка, здание как функция → at ----------
+___ home = at
+___ work = at
+___ school = at
+___ university = at
+___ the bus stop = at
+___ the door = at
+___ the cinema = at
+___ the top of the page = at
+___ the entrance = at
+
+# ---------- ГЛАГОЛ + ПРЕДЛОГ ----------
+It depends ___ the weather = on
+I'm listening ___ music = to
+Look ___ this photo = at
+We're waiting ___ the bus = for
+This book belongs ___ me = to
+She applied ___ a new job = for
+The team consists ___ ten players = of
+I agree ___ you = with
+Think ___ it before you decide = about
+Don't laugh ___ him = at
+We arrived ___ the airport = at
+They arrived ___ Moscow = in
+I'm looking ___ my keys = for
+Who will look ___ the cat = after
+Take care ___ yourself = of
+He insisted ___ paying = on
+You can rely ___ her = on
+She succeeded ___ finding a job = in
+I believe ___ you = in
+Don't worry ___ it = about
+He complained ___ the noise = about
+Focus ___ one thing = on
+I took part ___ the race = in
+It resulted ___ a big change = in
+The rain prevented us ___ going out = from
+I prefer tea ___ coffee = to
+Don't blame me ___ it = for
+They accused him ___ lying = of
+It reminds me ___ my childhood = of
+Congratulations ___ your exam = on
+I apologise ___ being late = for
+She suffers ___ headaches = from
+We all benefit ___ the change = from
+He's dealing ___ the problem = with
+I'm dreaming ___ a holiday = of
+Explain it ___ me = to
+Ask her ___ help = for
+Who paid ___ the tickets = for
+Talk ___ your teacher = to
+Don't shout ___ the kids = at
+Someone knocked ___ the door = on
+I spend too much money ___ books = on
+Translate it ___ Russian = into
+Divide it ___ three parts = into
+He turned ___ the light = on
+She got ___ the bus at the station = on
+
+# ---------- ПРИЛАГАТЕЛЬНОЕ + ПРЕДЛОГ ----------
+I'm afraid ___ spiders = of
+She's interested ___ history = in
+He's good ___ maths = at
+I'm keen ___ football = on
+They're proud ___ their son = of
+I'm tired ___ waiting = of
+This is similar ___ that one = to
+It's different ___ mine = from
+Who is responsible ___ this = for
+The town is famous ___ its cheese = for
+She's married ___ a doctor = to
+I'm worried ___ the exam = about
+He's angry ___ me = with
+The glass is full ___ water = of
+I'm sorry ___ the delay = for
+Are you ready ___ the trip = for
+That's typical ___ him = of
+She's aware ___ the risk = of
+I'm used ___ getting up early = to
+He's capable ___ much more = of
+
+# ---------- УСТОЙЧИВЫЕ ВЫРАЖЕНИЯ ----------
+___ fact, it was easy = in
+He did it ___ purpose = on
+We met ___ accident = by
+I'm ___ a hurry = in
+I paid ___ card = by
+He came ___ foot = on
+___ my opinion, it's fine = in
+The house is ___ fire = on
+She's ___ holiday = on
+I heard it ___ the radio = on
+I saw it ___ TV = on
+He's ___ his way = on
+Write it ___ pencil = in
+___ general, I agree = in
+___ the end, we won = in
+___ the beginning it was hard = at
+There were ___ least ten people = at
+___ course you can = of
+___ example, this one = for
+___ the way, are you free = by
+The train arrived ___ time, exactly at nine = on
+We got there just ___ time to see the start = in
