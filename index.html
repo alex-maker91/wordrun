@@ -201,6 +201,15 @@ input[type=file]{display:none}
       а прогресс перестанет чиститься Safari.</div>
     </div>
     <div class="card" id="deckInfo"></div>
+    <div class="card" id="syncCard" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div style="min-width:0">
+          <div style="font-weight:700;font-size:15px">Общий словарь</div>
+          <div class="small" id="syncInfo">—</div>
+        </div>
+        <button class="btn sm ghost" id="syncBtn" style="flex:none">Обновить</button>
+      </div>
+    </div>
 
     <button class="btn" id="playBtn">▶︎ Играть</button>
     <div class="row">
@@ -310,6 +319,9 @@ challenge	вызов, испытание"></textarea>
       <button class="btn ghost" id="fileBtn">📄 Загрузить файл (.txt / .csv)</button>
       <input type="file" id="fileInput" accept=".txt,.csv,.tsv,.json,text/plain">
       <p class="small">Если слово уже есть — оно не задвоится, перевод обновится.</p>
+      <p class="small">Чтобы залить слова <b>с компьютера</b>: открой в репозитории файл
+      <code>words.txt</code>, нажми карандаш, добавь строки, Commit. Телефон подтянет их
+      при следующем запуске — прогресс по старым словам при этом не сбрасывается.</p>
     </div>
   </div>
 </section>
@@ -331,6 +343,8 @@ const KEY = "wordrun_v1";
 const DEFAULTS = {
   v: 1,
   turn: 0,
+  deckSig: "",      // signature of the shared words.txt we last merged
+  deckAt: "",       // when that merge happened
   words: [],
   settings: { dir: "ru2en", lanes: 2, tts: true },
   stats: { best: 0, games: 0, answers: 0, correct: 0, days: 0, lastDay: "" }
@@ -503,6 +517,47 @@ function addWords(pairs){
 }
 
 DB = load();
+
+// ---- shared dictionary -----------------------------------------------------
+// words.txt lives next to the game. Edit it on the computer, the phone picks it
+// up on the next launch. Progress stays on each device; only words travel.
+const DECK_URL = "./words.txt";
+
+function sig(str){                       // djb2, enough to spot "file changed"
+  let h = 5381;
+  for(let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return String(h >>> 0) + "." + str.length;
+}
+
+async function syncDeck(manual){
+  if(!location.protocol.startsWith("http")) return { skipped: "local" };
+  try{
+    const r = await fetch(DECK_URL + "?t=" + Date.now(), { cache: "no-store" });
+    if(!r.ok) return { failed: r.status };
+    const txt = await r.text();
+    const s = sig(txt);
+    if(!manual && DB.deckSig === s) return { unchanged: true };
+    const pairs = parseList(txt);
+    if(!pairs.length) return { failed: "empty" };
+    const res = addWords(pairs);
+    DB.deckSig = s;
+    DB.deckAt = new Date().toISOString().slice(0, 10);
+    save();
+    return res;
+  }catch(e){
+    return { failed: "offline" };
+  }
+}
+
+function renderSync(res){
+  const card = $("#syncCard"), info = $("#syncInfo");
+  if(!card) return;
+  card.style.display = location.protocol.startsWith("http") ? "" : "none";
+  if(!res){ info.textContent = DB.deckAt ? `Последняя сверка: ${DB.deckAt}` : "Ещё не сверялся"; return; }
+  if(res.failed) info.innerHTML = `<span class="warn">Нет связи — играем с тем, что есть</span>`;
+  else if(res.added || res.updated) info.innerHTML = `<span class="ok">+${res.added} новых${res.updated ? `, ${res.updated} уточнено` : ""}</span> · ${DB.deckAt}`;
+  else info.textContent = `Всё уже здесь · сверено ${DB.deckAt || "сейчас"}`;
+}
 
 /* =========================================================
    2. SRS (Leitner)
@@ -1126,6 +1181,12 @@ document.addEventListener("visibilitychange", () => {
   if(document.hidden && RUN.state === "playing"){ stopRun(); show("s-menu"); }
 });
 
+$("#syncBtn").addEventListener("click", async () => {
+  $("#syncInfo").textContent = "Проверяю…";
+  renderSync(await syncDeck(true));
+  renderMenu();
+});
+
 /* ---------- PWA ---------- */
 const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -1142,6 +1203,8 @@ if("serviceWorker" in navigator && location.protocol.startsWith("http")){
 /* ---------- boot ---------- */
 resize();
 renderMenu();
+renderSync(null);
+syncDeck(false).then(res => { renderSync(res); renderMenu(); });
 requestAnimationFrame(frame);
 window.WR = { DB, save, parseList, pickWord, RUN, startRun, setLane, resolveGate };
 </script>
