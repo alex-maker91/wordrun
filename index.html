@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0f1a">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="icon" href="./icons/favicon-32.png" sizes="32x32">
+<title>WordRun — слова на бегу</title>
+<style>
+:root{
+  --bg:#0b0f1a;
+  --bg2:#121a2e;
+  --ink:#eaf0ff;
+  --dim:#8b98b8;
+  --cyan:#22e3ff;
+  --mag:#ff4fd8;
+  --lime:#4ef08a;
+  --red:#ff5470;
+  --gold:#ffc93c;
+  --card:rgba(255,255,255,.06);
+  --line:rgba(255,255,255,.12);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  overflow:hidden;
+  overscroll-behavior:none;
+  touch-action:none;
+  user-select:none;
+  -webkit-user-select:none;
+}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden}
+
+/* ---------- screens ---------- */
+.screen{position:absolute;inset:0;display:none;flex-direction:column;overflow:hidden}
+.screen.on{display:flex}
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding:0 18px calc(24px + env(safe-area-inset-bottom))}
+.pad-top{padding-top:calc(18px + env(safe-area-inset-top))}
+
+h1{font-size:34px;letter-spacing:-1px;margin:6px 0 2px;font-weight:800}
+h2{font-size:19px;margin:22px 0 10px;font-weight:700}
+p.sub{color:var(--dim);font-size:14px;line-height:1.5;margin:4px 0 18px}
+.small{font-size:12.5px;color:var(--dim);line-height:1.5}
+
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:16px;border-radius:16px;border:0;
+  font-size:16.5px;font-weight:700;font-family:inherit;color:#04121a;
+  background:linear-gradient(135deg,var(--cyan),#5bffd0);
+  cursor:pointer;margin-bottom:10px;
+  box-shadow:0 8px 24px rgba(34,227,255,.22);
+  transition:transform .08s;
+}
+.btn:active{transform:scale(.975)}
+.btn.ghost{background:var(--card);color:var(--ink);border:1px solid var(--line);box-shadow:none}
+.btn.danger{background:transparent;color:var(--red);border:1px solid rgba(255,84,112,.4);box-shadow:none}
+.btn.sm{padding:11px 14px;font-size:14px;width:auto;border-radius:12px;margin:0}
+
+.row{display:flex;gap:10px}
+.row>*{flex:1}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:10px}
+
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px}
+.seg button{
+  flex:1;padding:11px 8px;border:0;border-radius:10px;background:transparent;
+  color:var(--dim);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;
+}
+.seg button.on{background:rgba(34,227,255,.16);color:var(--cyan)}
+
+textarea{
+  width:100%;min-height:190px;background:rgba(0,0,0,.35);color:var(--ink);
+  border:1px solid var(--line);border-radius:14px;padding:14px;font-size:14px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.6;resize:vertical;
+  touch-action:auto;
+}
+input[type=file]{display:none}
+
+/* ---------- game ---------- */
+#gameWrap{position:absolute;inset:0;overflow:hidden}
+#shake{position:absolute;inset:0;will-change:transform}
+#fx{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+#hud{
+  position:absolute;left:0;right:0;top:0;z-index:6;
+  padding:calc(10px + env(safe-area-inset-top)) 16px 0;
+  display:flex;align-items:center;justify-content:space-between;pointer-events:none;
+}
+#lives{font-size:17px;letter-spacing:2px}
+#scoreBox{text-align:right}
+#score{font-size:22px;font-weight:800;line-height:1}
+#combo{font-size:12px;color:var(--gold);font-weight:700;height:15px;line-height:15px}
+#pauseBtn{
+  pointer-events:auto;background:var(--card);border:1px solid var(--line);color:var(--ink);
+  width:38px;height:38px;border-radius:12px;font-size:15px;cursor:pointer;margin-left:10px;
+}
+
+#promptBox{
+  position:absolute;z-index:5;left:0;right:0;
+  top:calc(58px + env(safe-area-inset-top));
+  display:flex;flex-direction:column;align-items:center;pointer-events:none;padding:0 16px;
+}
+#promptLabel{font-size:11px;letter-spacing:2.5px;color:var(--dim);text-transform:uppercase;margin-bottom:6px}
+#prompt{
+  font-size:31px;font-weight:800;text-align:center;line-height:1.15;letter-spacing:-.5px;
+  text-shadow:0 0 26px rgba(34,227,255,.35);
+}
+#prompt.pop{animation:pop .32s ease}
+@keyframes pop{0%{transform:scale(.86);opacity:0}60%{transform:scale(1.04)}100%{transform:scale(1);opacity:1}}
+
+.gate{position:absolute;left:0;right:0;display:flex;gap:10px;padding:0 12px;will-change:transform;z-index:3}
+.cell{
+  flex:1;height:92px;border-radius:18px;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  padding:6px 7px;font-size:20px;font-weight:700;line-height:1.12;
+  background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.03));
+  border:2px solid rgba(255,255,255,.22);
+  backdrop-filter:blur(2px);
+  word-break:break-word;
+  transition:background .12s,border-color .12s,transform .12s,opacity .3s;
+}
+.cell.good{background:rgba(78,240,138,.28);border-color:var(--lime);color:#dfffe9}
+.cell.bad{background:rgba(255,84,112,.26);border-color:var(--red);color:#ffe3e8;opacity:.75}
+.cell.miss{opacity:.28}
+
+#player{
+  position:absolute;z-index:4;width:46px;height:46px;margin-left:-23px;margin-top:-23px;
+  border-radius:14px;
+  background:linear-gradient(150deg,var(--cyan),var(--mag));
+  box-shadow:0 0 26px rgba(34,227,255,.7),0 0 60px rgba(255,79,216,.35);
+  will-change:transform;
+}
+#player.hit{animation:hitfl .35s linear 2}
+@keyframes hitfl{50%{opacity:.25}}
+
+#reveal{
+  position:absolute;inset:0;z-index:8;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:6px;padding:24px;text-align:center;
+  background:rgba(8,10,20,.9);backdrop-filter:blur(6px);
+}
+#reveal.on{display:flex}
+#revTitle{font-size:13px;letter-spacing:2px;color:var(--red);text-transform:uppercase;font-weight:800}
+#revEn{font-size:40px;font-weight:800;letter-spacing:-1px;margin-top:8px}
+#revRu{font-size:22px;color:var(--dim);font-weight:600}
+#revHint{margin-top:26px;font-size:12.5px;color:var(--dim)}
+
+#toast{
+  position:absolute;z-index:7;left:50%;transform:translateX(-50%);
+  font-weight:800;pointer-events:none;opacity:0;
+}
+@keyframes floatUp{0%{opacity:1;transform:translate(-50%,0) scale(.8)}100%{opacity:0;transform:translate(-50%,-70px) scale(1.25)}}
+
+/* ---------- lists ---------- */
+.wrow{display:flex;align-items:center;gap:10px;padding:11px 12px;border-bottom:1px solid rgba(255,255,255,.07)}
+.wrow .en{font-weight:700;font-size:15px}
+.wrow .ru{color:var(--dim);font-size:13px}
+.wrow .col{flex:1;min-width:0}
+.wrow .col>div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{font-size:10px;padding:3px 8px;border-radius:99px;font-weight:800;letter-spacing:.4px;white-space:nowrap}
+.p0{background:rgba(255,84,112,.18);color:#ff8ea1}
+.p1{background:rgba(255,201,60,.18);color:var(--gold)}
+.p2{background:rgba(78,240,138,.16);color:var(--lime)}
+.del{background:none;border:0;color:var(--dim);font-size:18px;cursor:pointer;padding:4px 6px}
+
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.stat .n{font-size:26px;font-weight:800;line-height:1.1}
+.stat .l{font-size:11.5px;color:var(--dim);margin-top:3px}
+
+.bar{height:9px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;display:flex;margin:8px 0 4px}
+.bar i{display:block;height:100%}
+
+.topbar{display:flex;align-items:center;gap:12px;padding:calc(12px + env(safe-area-inset-top)) 16px 10px}
+.topbar h1{font-size:22px;margin:0;flex:1}
+.back{background:var(--card);border:1px solid var(--line);color:var(--ink);width:38px;height:38px;border-radius:12px;font-size:17px;cursor:pointer}
+.logo{font-size:40px;font-weight:900;letter-spacing:-2px;background:linear-gradient(100deg,var(--cyan),var(--mag));-webkit-background-clip:text;background-clip:text;color:transparent}
+.ok{color:var(--lime)}.warn{color:var(--gold)}.err{color:var(--red)}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ================= MENU ================= -->
+<section class="screen on" id="s-menu">
+  <div class="scroll pad-top">
+    <div class="logo">WordRun</div>
+    <p class="sub">Беги, выбирай правильные ворота, учи свои слова.</p>
+
+    <div class="card" id="installHint" style="display:none;border-color:rgba(34,227,255,.35);background:rgba(34,227,255,.07)">
+      <div style="font-weight:700;font-size:15px;margin-bottom:6px">Поставь на домашний экран</div>
+      <div class="small">Внизу Safari нажми <b>Поделиться</b> → <b>На экран «Домой»</b>.
+      Игра откроется на весь экран без адресной строки, будет работать без интернета,
+      а прогресс перестанет чиститься Safari.</div>
+    </div>
+    <div class="card" id="deckInfo"></div>
+
+    <button class="btn" id="playBtn">▶︎ Играть</button>
+    <div class="row">
+      <button class="btn ghost sm" style="width:100%" data-go="s-words">📚 Мои слова</button>
+      <button class="btn ghost sm" style="width:100%" data-go="s-stats">📊 Прогресс</button>
+    </div>
+
+    <h2>Настройки</h2>
+    <div class="card">
+      <div class="small" style="margin-bottom:8px">Направление перевода</div>
+      <div class="seg" id="dirSeg">
+        <button data-dir="ru2en">Рус → Англ<br><span style="font-weight:500;font-size:11px;opacity:.7">сложнее, полезнее</span></button>
+        <button data-dir="en2ru">Англ → Рус<br><span style="font-weight:500;font-size:11px;opacity:.7">легче, для новых</span></button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="small" style="margin-bottom:8px">Сколько ворот</div>
+      <div class="seg" id="laneSeg">
+        <button data-lanes="2">2 — быстро</button>
+        <button data-lanes="3">3 — сложнее</button>
+      </div>
+    </div>
+    <div class="card" style="display:flex;align-items:center;justify-content:space-between">
+      <div><div style="font-weight:700;font-size:15px">Озвучка слов</div><div class="small">Читает английское слово вслух</div></div>
+      <button class="btn sm ghost" id="ttsBtn">вкл</button>
+    </div>
+
+    <p class="small" style="margin-top:18px">
+      Слова и прогресс хранятся только на этом устройстве — никуда не отправляются.
+      Раз в месяц имеет смысл нажать «Сохранить резервную копию» в разделе «Мои слова».
+    </p>
+  </div>
+</section>
+
+<!-- ================= GAME ================= -->
+<section class="screen" id="s-game">
+  <div id="gameWrap">
+    <div id="shake">
+      <canvas id="fx"></canvas>
+      <div id="player"></div>
+    </div>
+    <div id="hud">
+      <div id="lives">❤︎❤︎❤︎</div>
+      <div style="display:flex;align-items:center">
+        <div id="scoreBox"><div id="score">0</div><div id="combo"></div></div>
+        <button id="pauseBtn">॥</button>
+      </div>
+    </div>
+    <div id="promptBox">
+      <div id="promptLabel">переведи</div>
+      <div id="prompt"></div>
+    </div>
+    <div id="toast"></div>
+    <div id="reveal">
+      <div id="revTitle">не то слово</div>
+      <div id="revEn"></div>
+      <div id="revRu"></div>
+      <div id="revHint">нажми, чтобы продолжить</div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= GAME OVER ================= -->
+<section class="screen" id="s-over">
+  <div class="scroll pad-top">
+    <h1 id="overTitle">Забег окончен</h1>
+    <p class="sub" id="overSub"></p>
+    <div class="statgrid" style="margin-bottom:14px">
+      <div class="stat"><div class="n" id="ovScore">0</div><div class="l">очки</div></div>
+      <div class="stat"><div class="n" id="ovBest">0</div><div class="l">рекорд</div></div>
+      <div class="stat"><div class="n" id="ovAcc">0%</div><div class="l">точность забега</div></div>
+      <div class="stat"><div class="n" id="ovMax">0</div><div class="l">лучшее комбо</div></div>
+    </div>
+    <div id="missBlock"></div>
+    <button class="btn" id="againBtn">↻ Ещё забег</button>
+    <button class="btn ghost" data-go="s-menu">В меню</button>
+  </div>
+</section>
+
+<!-- ================= WORDS ================= -->
+<section class="screen" id="s-words">
+  <div class="topbar"><button class="back" data-go="s-menu">←</button><h1>Мои слова</h1></div>
+  <div class="scroll">
+    <div class="seg" id="wordsTabs" style="margin-bottom:14px">
+      <button data-wtab="list" class="on">Список</button>
+      <button data-wtab="add">Добавить</button>
+    </div>
+
+    <div id="wtab-list">
+      <div id="wordsSummary" class="small" style="margin-bottom:10px"></div>
+      <div class="card" style="padding:0;overflow:hidden" id="wordsList"></div>
+      <div style="height:12px"></div>
+      <button class="btn ghost" id="exportBtn">⬇︎ Сохранить резервную копию</button>
+      <button class="btn danger" id="wipeBtn">Удалить все слова и прогресс</button>
+    </div>
+
+    <div id="wtab-add" style="display:none">
+      <p class="sub">Вставь слова — по одному на строку. Понимаю любой разделитель:
+        <code>—</code>, <code>-</code>, <code>=</code>, <code>;</code>, запятая или табуляция.
+        Что где — английское и русское — определю сам.</p>
+      <textarea id="importArea" placeholder="apple — яблоко
+to achieve - достигать
+weather = погода
+challenge	вызов, испытание"></textarea>
+      <div id="importPreview" class="small" style="margin:8px 0 12px"></div>
+      <button class="btn" id="importBtn">Добавить в словарь</button>
+      <button class="btn ghost" id="fileBtn">📄 Загрузить файл (.txt / .csv)</button>
+      <input type="file" id="fileInput" accept=".txt,.csv,.tsv,.json,text/plain">
+      <p class="small">Если слово уже есть — оно не задвоится, перевод обновится.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= STATS ================= -->
+<section class="screen" id="s-stats">
+  <div class="topbar"><button class="back" data-go="s-menu">←</button><h1>Прогресс</h1></div>
+  <div class="scroll" id="statsBody"></div>
+</section>
+
+</div>
+
+<script>
+"use strict";
+/* =========================================================
+   0. STORAGE
+   ========================================================= */
+const KEY = "wordrun_v1";
+const DEFAULTS = {
+  v: 1,
+  turn: 0,
+  words: [],
+  settings: { dir: "ru2en", lanes: 2, tts: true },
+  stats: { best: 0, games: 0, answers: 0, correct: 0, days: 0, lastDay: "" }
+};
+
+const STARTER = `achieve — достигать
+although — хотя
+amount — количество
+apply — применять, подавать заявку
+approach — подход, подходить
+available — доступный
+average — средний
+avoid — избегать
+behaviour — поведение
+belong — принадлежать
+benefit — польза, выгода
+borrow — занимать, брать в долг
+challenge — вызов, сложная задача
+claim — утверждать, требовать
+common — общий, распространённый
+compare — сравнивать
+concern — беспокойство, касаться
+consider — считать, рассматривать
+decrease — уменьшаться
+deliver — доставлять
+deny — отрицать
+describe — описывать
+develop — развивать
+enough — достаточно
+environment — окружающая среда
+especially — особенно
+event — событие
+expect — ожидать
+experience — опыт
+explain — объяснять
+fail — потерпеть неудачу
+figure — цифра, фигура
+follow — следовать
+guess — догадываться
+huge — огромный
+improve — улучшать
+include — включать
+increase — увеличиваться
+issue — вопрос, проблема
+knowledge — знание
+lack — нехватка
+likely — вероятный
+maintain — поддерживать
+mention — упоминать
+neighbour — сосед
+obvious — очевидный
+occur — происходить
+opportunity — возможность
+own — собственный, владеть
+particular — конкретный
+perhaps — возможно
+prevent — предотвращать
+provide — предоставлять
+purpose — цель
+quite — довольно
+reach — достигать, дотянуться
+reason — причина
+receive — получать
+reduce — сокращать
+refuse — отказываться
+remain — оставаться
+require — требовать
+research — исследование
+rough — грубый, черновой
+serve — обслуживать, подавать
+several — несколько
+share — делиться, доля
+similar — похожий
+skill — навык
+spend — тратить
+spread — распространять
+straight — прямой
+suggest — предлагать
+support — поддержка
+suppose — предполагать
+surface — поверхность
+though — хотя
+threat — угроза
+tough — трудный, жёсткий
+treat — обращаться, лечить
+trust — доверять
+unless — если не
+various — различный
+weight — вес
+whether — ли
+worth — стоящий`;
+
+let DB = null; // initialised right after the parser is defined (see below)
+
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const d = JSON.parse(raw);
+      return Object.assign({}, DEFAULTS, d, {
+        settings: Object.assign({}, DEFAULTS.settings, d.settings||{}),
+        stats: Object.assign({}, DEFAULTS.stats, d.stats||{})
+      });
+    }
+  }catch(e){ console.warn("load failed", e); }
+  const fresh = JSON.parse(JSON.stringify(DEFAULTS));
+  fresh.words = parseList(STARTER).map(mkWord);
+  return fresh;
+}
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(DB)); }
+  catch(e){ console.warn("save failed", e); }
+}
+let uid = Date.now();
+function mkWord(p){
+  return { id: ++uid, en: p.en, ru: p.ru, box: 0, due: 0, seen: false, ok: 0, err: 0 };
+}
+
+/* =========================================================
+   1. IMPORT PARSER
+   ========================================================= */
+const CYR = /[Ѐ-ӿ]/;
+const SEPS = ["\t", " — ", " – ", " -- ", " - ", " = ", "—", "–", "=", ";", " | ", "|", ",", " : ", ":"];
+
+function parseList(text){
+  const out = [];
+  const lines = String(text||"").split(/\r?\n/);
+  for(let line of lines){
+    line = line.trim();
+    if(!line || line.startsWith("#") || line.startsWith("//")) continue;
+    let a = null, b = null;
+    for(const s of SEPS){
+      const i = line.indexOf(s);
+      if(i > 0 && i < line.length - s.length){
+        a = line.slice(0, i).trim();
+        b = line.slice(i + s.length).trim();
+        break;
+      }
+    }
+    if(!a || !b) continue;
+    a = a.replace(/^["'«]|["'»]$/g, "").trim();
+    b = b.replace(/^["'«]|["'»]$/g, "").trim();
+    if(!a || !b) continue;
+    let en, ru;
+    const aC = CYR.test(a), bC = CYR.test(b);
+    if(aC && !bC){ ru = a; en = b; }
+    else { en = a; ru = b; }
+    if(!en || !ru) continue;
+    if(en.length > 40 || ru.length > 48) continue;
+    out.push({ en, ru });
+  }
+  return out;
+}
+
+function addWords(pairs){
+  const idx = new Map(DB.words.map(w => [w.en.toLowerCase(), w]));
+  let added = 0, updated = 0;
+  for(const p of pairs){
+    const k = p.en.toLowerCase();
+    if(idx.has(k)){
+      const w = idx.get(k);
+      if(w.ru !== p.ru){ w.ru = p.ru; updated++; }
+    } else {
+      const w = mkWord(p);
+      DB.words.push(w); idx.set(k, w); added++;
+    }
+  }
+  save();
+  return { added, updated };
+}
+
+DB = load();
+
+/* =========================================================
+   2. SRS (Leitner)
+   ========================================================= */
+const INTERVALS = [2, 6, 15, 40, 100, 260];
+const LEARN_CAP = 8;
+
+function dueWords(){
+  return DB.words.filter(w => w.seen && w.due <= DB.turn);
+}
+function activeLearning(){
+  return DB.words.filter(w => w.seen && w.box < 3).length;
+}
+function pickWord(){
+  const pool = DB.words;
+  if(!pool.length) return null;
+  const unseen = pool.filter(w => !w.seen);
+  const due = dueWords();
+
+  let w = null;
+  const wantNew = unseen.length && activeLearning() < LEARN_CAP && (due.length === 0 || DB.turn % 3 === 0);
+  if(wantNew){
+    w = unseen[Math.floor(Math.random() * unseen.length)];
+    w.seen = true;
+  } else if(due.length){
+    due.sort((a, b) => (a.box - b.box) || (a.due - b.due));
+    const head = due.slice(0, Math.min(4, due.length));
+    w = head[Math.floor(Math.random() * head.length)];
+  } else if(unseen.length){
+    w = unseen[Math.floor(Math.random() * unseen.length)];
+    w.seen = true;
+  } else {
+    const s = pool.slice().sort((a, b) => a.due - b.due);
+    w = s[Math.floor(Math.random() * Math.min(4, s.length))];
+  }
+  return w;
+}
+function grade(w, right){
+  DB.turn++;
+  if(right){
+    w.ok++;
+    w.box = Math.min(5, w.box + 1);
+  } else {
+    w.err++;
+    w.box = 0;
+  }
+  w.due = DB.turn + INTERVALS[w.box];
+}
+
+function answerOf(w){ return DB.settings.dir === "ru2en" ? w.en : w.ru; }
+function questionOf(w){ return DB.settings.dir === "ru2en" ? w.ru : w.en; }
+
+// What actually goes on a gate. Long multi-sense translations ("утверждать, требовать")
+// get cut to their first sense so the tile stays readable at speed.
+function gateText(w){
+  let t = answerOf(w);
+  if(t.length > 15){
+    const cut = t.split(/[,;/]/)[0].trim();
+    if(cut.length >= 3) t = cut;
+  }
+  return t;
+}
+// Font size that keeps the text inside the tile without measuring.
+function fitSize(text, lanes){
+  const n = text.length;
+  if(lanes <= 2) return n <= 9 ? 21 : n <= 13 ? 18 : n <= 18 ? 16 : 14;
+  return n <= 6 ? 18 : n <= 9 ? 16 : n <= 13 ? 14 : 12.5;
+}
+
+function distractors(target, n){
+  const ans = gateText(target).toLowerCase();
+  const cands = DB.words.filter(w => w.id !== target.id && gateText(w).toLowerCase() !== ans);
+  if(!cands.length) return [];
+  const t = gateText(target);
+  const scored = cands.map(w => {
+    const a = gateText(w);
+    let s = Math.random() * 1.2;
+    if(a[0] && t[0] && a[0].toLowerCase() === t[0].toLowerCase()) s += 2.2;
+    if(Math.abs(a.length - t.length) <= 2) s += 1.2;
+    if(w.box === target.box) s += .5;
+    if(w.seen) s += .6;
+    return { w, s };
+  }).sort((x, y) => y.s - x.s);
+  const top = scored.slice(0, Math.max(n, Math.min(scored.length, n * 4)));
+  const out = [];
+  const used = new Set([ans]);
+  while(out.length < n && top.length){
+    const i = Math.floor(Math.random() * Math.min(top.length, n * 3));
+    const c = top.splice(i, 1)[0];
+    const a = gateText(c.w).toLowerCase();
+    if(used.has(a)) continue;
+    used.add(a); out.push(c.w);
+  }
+  return out;
+}
+
+/* =========================================================
+   3. UI PLUMBING
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+function show(id){
+  $$(".screen").forEach(el => el.classList.toggle("on", el.id === id));
+  if(id === "s-menu") renderMenu();
+  if(id === "s-words") renderWords();
+  if(id === "s-stats") renderStats();
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-go]");
+  if(b){ if(RUN.state !== "idle") stopRun(); show(b.dataset.go); }
+});
+
+function renderMenu(){
+  const total = DB.words.length;
+  const seen = DB.words.filter(w => w.seen).length;
+  const strong = DB.words.filter(w => w.box >= 4).length;
+  $("#deckInfo").innerHTML =
+    `<div style="font-weight:700;font-size:15px;margin-bottom:6px">В словаре ${total} ${plural(total,"слово","слова","слов")}</div>` +
+    `<div class="small">Начато: ${seen} · Уверенно знаешь: <span class="ok">${strong}</span>` +
+    (DB.stats.best ? ` · Рекорд: <span class="warn">${DB.stats.best}</span>` : "") + `</div>`;
+  $$("#dirSeg button").forEach(b => b.classList.toggle("on", b.dataset.dir === DB.settings.dir));
+  $$("#laneSeg button").forEach(b => b.classList.toggle("on", +b.dataset.lanes === DB.settings.lanes));
+  $("#ttsBtn").textContent = DB.settings.tts ? "вкл" : "выкл";
+  $("#ttsBtn").style.color = DB.settings.tts ? "var(--cyan)" : "var(--dim)";
+}
+function plural(n, a, b, c){
+  const m = n % 100, k = n % 10;
+  if(m > 10 && m < 20) return c;
+  if(k === 1) return a;
+  if(k >= 2 && k <= 4) return b;
+  return c;
+}
+$("#dirSeg").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  DB.settings.dir = b.dataset.dir; save(); renderMenu();
+});
+$("#laneSeg").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  DB.settings.lanes = +b.dataset.lanes; save(); renderMenu();
+});
+$("#ttsBtn").addEventListener("click", () => { DB.settings.tts = !DB.settings.tts; save(); renderMenu(); });
+
+/* ---- words screen ---- */
+$("#wordsTabs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  $$("#wordsTabs button").forEach(x => x.classList.toggle("on", x === b));
+  $("#wtab-list").style.display = b.dataset.wtab === "list" ? "" : "none";
+  $("#wtab-add").style.display = b.dataset.wtab === "add" ? "" : "none";
+});
+function renderWords(){
+  const ws = DB.words.slice().sort((a, b) => (a.box - b.box) || (b.err - a.err));
+  $("#wordsSummary").textContent = `${DB.words.length} ${plural(DB.words.length,"слово","слова","слов")} · сложные сверху`;
+  const html = ws.map(w => {
+    const cls = w.box === 0 ? "p0" : (w.box < 4 ? "p1" : "p2");
+    const lbl = !w.seen ? "новое" : (w.box === 0 ? "трудное" : (w.box < 4 ? "учу" : "знаю"));
+    return `<div class="wrow" data-id="${w.id}">
+      <div class="col"><div class="en">${esc(w.en)}</div><div class="ru">${esc(w.ru)}</div></div>
+      <span class="pill ${cls}">${lbl}</span>
+      <button class="del" data-del="${w.id}">×</button>
+    </div>`;
+  }).join("");
+  $("#wordsList").innerHTML = html || `<div style="padding:18px" class="small">Пусто. Добавь слова во вкладке «Добавить».</div>`;
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c])); }
+$("#wordsList").addEventListener("click", e => {
+  const b = e.target.closest("[data-del]"); if(!b) return;
+  const id = +b.dataset.del;
+  DB.words = DB.words.filter(w => w.id !== id); save(); renderWords();
+});
+$("#importArea").addEventListener("input", () => {
+  const p = parseList($("#importArea").value);
+  $("#importPreview").innerHTML = p.length
+    ? `Распознал <span class="ok">${p.length}</span> ${plural(p.length,"пару","пары","пар")}. Например: <b>${esc(p[0].en)}</b> → ${esc(p[0].ru)}`
+    : ($("#importArea").value.trim() ? `<span class="err">Пока не вижу пар. Нужно «слово — перевод» в каждой строке.</span>` : "");
+});
+$("#importBtn").addEventListener("click", () => {
+  const pairs = parseList($("#importArea").value);
+  if(!pairs.length){ $("#importPreview").innerHTML = `<span class="err">Нечего добавлять.</span>`; return; }
+  const r = addWords(pairs);
+  $("#importArea").value = "";
+  $("#importPreview").innerHTML = `<span class="ok">Готово: +${r.added} новых${r.updated ? `, обновлено ${r.updated}` : ""}.</span>`;
+  renderWords();
+});
+$("#fileBtn").addEventListener("click", () => $("#fileInput").click());
+$("#fileInput").addEventListener("change", e => {
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    let txt = String(r.result);
+    if(f.name.endsWith(".json")){
+      try{
+        const j = JSON.parse(txt);
+        const arr = Array.isArray(j) ? j : (j.words || []);
+        txt = arr.map(w => `${w.en} — ${w.ru}`).join("\n");
+      }catch(err){ /* treat as text */ }
+    }
+    $("#importArea").value = txt;
+    $("#importArea").dispatchEvent(new Event("input"));
+  };
+  r.readAsText(f);
+  e.target.value = "";
+});
+$("#exportBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(DB, null, 1)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "wordrun-backup.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+});
+$("#wipeBtn").addEventListener("click", () => {
+  if(!confirm("Удалить все слова и весь прогресс?")) return;
+  DB = JSON.parse(JSON.stringify(DEFAULTS));
+  save(); renderWords(); renderMenu();
+});
+
+/* ---- stats ---- */
+function renderStats(){
+  const w = DB.words;
+  const nNew = w.filter(x => !x.seen).length;
+  const nHard = w.filter(x => x.seen && x.box === 0).length;
+  const nLearn = w.filter(x => x.seen && x.box >= 1 && x.box <= 3).length;
+  const nKnow = w.filter(x => x.box >= 4).length;
+  const tot = w.length || 1;
+  const acc = DB.stats.answers ? Math.round(DB.stats.correct / DB.stats.answers * 100) : 0;
+  const hard = w.filter(x => x.err > 0).sort((a, b) => (b.err - a.err) || (a.box - b.box)).slice(0, 12);
+
+  $("#statsBody").innerHTML = `
+    <div class="statgrid" style="margin-bottom:14px">
+      <div class="stat"><div class="n ok">${nKnow}</div><div class="l">знаю уверенно</div></div>
+      <div class="stat"><div class="n warn">${nLearn}</div><div class="l">в процессе</div></div>
+      <div class="stat"><div class="n">${DB.stats.best}</div><div class="l">рекорд очков</div></div>
+      <div class="stat"><div class="n">${acc}%</div><div class="l">общая точность</div></div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;font-size:15px">Словарь целиком</div>
+      <div class="bar">
+        <i style="width:${nKnow/tot*100}%;background:var(--lime)"></i>
+        <i style="width:${nLearn/tot*100}%;background:var(--gold)"></i>
+        <i style="width:${nHard/tot*100}%;background:var(--red)"></i>
+        <i style="width:${nNew/tot*100}%;background:rgba(255,255,255,.14)"></i>
+      </div>
+      <div class="small"><span class="ok">■</span> знаю ${nKnow} · <span class="warn">■</span> учу ${nLearn} · <span class="err">■</span> трудные ${nHard} · ■ не начато ${nNew}</div>
+    </div>
+    <div class="card">
+      <div class="small">Забегов сыграно: <b>${DB.stats.games}</b> · Ответов дано: <b>${DB.stats.answers}</b> · Дней подряд: <b>${DB.stats.days}</b></div>
+    </div>
+    <h2>Слова, которые тебя ловят</h2>
+    ${hard.length ? `<div class="card" style="padding:0;overflow:hidden">` + hard.map(x =>
+      `<div class="wrow"><div class="col"><div class="en">${esc(x.en)}</div><div class="ru">${esc(x.ru)}</div></div>
+       <span class="pill p0">${x.err} ${plural(x.err,"ошибка","ошибки","ошибок")}</span></div>`).join("") + `</div>`
+      : `<p class="small">Пока ни одной ошибки. Сыграй забег.</p>`}
+    <div style="height:20px"></div>`;
+}
+
+/* =========================================================
+   4. THE RUNNER
+   ========================================================= */
+const wrap = $("#gameWrap"), fx = $("#fx"), ctx = fx.getContext("2d");
+const playerEl = $("#player"), shakeEl = $("#shake");
+
+const RUN = {
+  state: "idle",           // idle | playing | reveal | over
+  W: 0, H: 0, dpr: 1,
+  lanes: 2,
+  lane: 0, px: 0, targetX: 0,
+  playerY: 0,
+  gates: [], gateEls: [],
+  speed: 200, road: 0,
+  score: 0, combo: 0, maxCombo: 0, lives: 3,
+  answers: 0, correct: 0, missed: [],
+  spawnGap: 0,
+  parts: [],
+  shakeT: 0
+};
+
+function resize(){
+  const r = wrap.getBoundingClientRect();
+  RUN.W = r.width; RUN.H = r.height;
+  RUN.dpr = Math.min(2, window.devicePixelRatio || 1);
+  fx.width = Math.round(RUN.W * RUN.dpr);
+  fx.height = Math.round(RUN.H * RUN.dpr);
+  ctx.setTransform(RUN.dpr, 0, 0, RUN.dpr, 0, 0);
+  RUN.playerY = RUN.H - Math.max(96, RUN.H * 0.16);
+  RUN.targetX = laneX(RUN.lane);
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", () => setTimeout(resize, 250));
+
+function laneX(i){
+  const pad = 12, gap = 10;
+  const w = (RUN.W - pad * 2 - gap * (RUN.lanes - 1)) / RUN.lanes;
+  return pad + i * (w + gap) + w / 2;
+}
+
+/* ---------- start / stop ---------- */
+function startRun(){
+  if(!DB.words.length){ alert("Сначала добавь слова в словарь."); show("s-words"); return; }
+  if(DB.words.length < 3){ alert("Нужно минимум 3 слова, чтобы были варианты ответа."); show("s-words"); return; }
+
+  markDay();
+  show("s-game");
+  resize();
+
+  RUN.lanes = Math.min(DB.settings.lanes, Math.max(2, Math.min(3, DB.words.length)));
+  RUN.state = "playing";
+  RUN.gates.forEach(g => g.el.remove());
+  RUN.gates = []; RUN.parts = [];
+  RUN.lane = Math.floor((RUN.lanes - 1) / 2);
+  RUN.px = laneX(RUN.lane); RUN.targetX = RUN.px;
+  RUN.speed = 300; RUN.score = 0; RUN.combo = 0; RUN.maxCombo = 0; RUN.lives = 3;
+  RUN.answers = 0; RUN.correct = 0; RUN.missed = []; RUN.spawnGap = 0; RUN.shakeT = 0;
+  $("#reveal").classList.remove("on");
+  updHUD();
+  spawnGate();
+}
+function stopRun(){
+  RUN.state = "idle";
+  RUN.gates.forEach(g => g.el.remove());
+  RUN.gates = [];
+  $("#reveal").classList.remove("on");
+  save();
+}
+$("#playBtn").addEventListener("click", startRun);
+$("#againBtn").addEventListener("click", startRun);
+$("#pauseBtn").addEventListener("click", e => { e.stopPropagation(); stopRun(); show("s-menu"); });
+
+function markDay(){
+  const today = new Date().toISOString().slice(0, 10);
+  if(DB.stats.lastDay !== today){
+    const y = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+    DB.stats.days = DB.stats.lastDay === y ? DB.stats.days + 1 : 1;
+    DB.stats.lastDay = today;
+  }
+  save();
+}
+
+/* ---------- gates ---------- */
+function spawnGate(){
+  const w = pickWord();
+  if(!w) return;
+  const need = RUN.lanes - 1;
+  const ds = distractors(w, need);
+  if(ds.length < need){                      // not enough distinct words for 3 gates
+    if(RUN.lanes > 2){ RUN.lanes = 2; return spawnGate(); }
+    return;                                  // guarded at startRun; never happens with 3+ words
+  }
+  const opts = ds.map(d => ({ text: gateText(d), right: false }));
+  const rightIdx = Math.floor(Math.random() * RUN.lanes);
+  opts.splice(rightIdx, 0, { text: gateText(w), right: true });
+
+  const el = document.createElement("div");
+  el.className = "gate";
+  el.innerHTML = opts.map(o =>
+    `<div class="cell" style="font-size:${fitSize(o.text, RUN.lanes)}px">${esc(o.text)}</div>`).join("");
+  shakeEl.appendChild(el);
+
+  const g = { el, y: -110, h: 92, word: w, opts, resolved: false };
+  el.style.transform = `translateY(${g.y}px)`;
+  RUN.gates.push(g);
+
+  $("#promptLabel").textContent = DB.settings.dir === "ru2en" ? "переведи на английский" : "переведи на русский";
+  const p = $("#prompt");
+  p.textContent = questionOf(w);
+  const ql = questionOf(w).length;
+  p.style.fontSize = ql > 28 ? "20px" : ql > 16 ? "24px" : "31px";
+  p.classList.remove("pop"); void p.offsetWidth; p.classList.add("pop");
+}
+
+function resolveGate(g){
+  g.resolved = true;
+  const chosen = RUN.lane;
+  const right = !!g.opts[chosen] && g.opts[chosen].right;
+  const cells = g.el.children;
+  for(let i = 0; i < cells.length; i++){
+    if(g.opts[i].right) cells[i].classList.add("good");
+    else if(i === chosen) cells[i].classList.add("bad");
+    else cells[i].classList.add("miss");
+  }
+
+  RUN.answers++;
+  DB.stats.answers++;
+  grade(g.word, right);
+
+  if(right){
+    RUN.correct++; DB.stats.correct++;
+    RUN.combo++;
+    RUN.maxCombo = Math.max(RUN.maxCombo, RUN.combo);
+    const mult = 1 + Math.floor(RUN.combo / 5);
+    const pts = 10 * mult;
+    RUN.score += pts;
+    burst(laneX(chosen), RUN.playerY, "#4ef08a", 22);
+    toast("+" + pts + (mult > 1 ? " ×" + mult : ""), "#4ef08a");
+    if(RUN.combo > 0 && RUN.combo % 10 === 0 && RUN.lives < 3){
+      RUN.lives++; toast("+❤︎", "#ff4fd8");
+    }
+    if(g.word.box <= 2) speak(g.word.en);   // only pronounce words still being learned
+    setTimeout(() => { if(RUN.state === "playing") spawnGate(); }, 90);
+  } else {
+    RUN.combo = 0;
+    RUN.lives--;
+    RUN.missed.push(g.word);
+    burst(laneX(chosen), RUN.playerY, "#ff5470", 26);
+    RUN.shakeT = 0.4;
+    playerEl.classList.remove("hit"); void playerEl.offsetWidth; playerEl.classList.add("hit");
+    if(navigator.vibrate) try{ navigator.vibrate(60); }catch(e){}
+    if(RUN.lives <= 0){ setTimeout(gameOver, 260); }
+    else showReveal(g.word);
+  }
+  updHUD();
+  save();
+}
+
+function showReveal(w){
+  RUN.state = "reveal";
+  $("#revEn").textContent = w.en;
+  $("#revRu").textContent = w.ru;
+  $("#reveal").classList.add("on");
+  speak(w.en);
+  clearTimeout(showReveal._t);
+  showReveal._t = setTimeout(closeReveal, 2200);
+}
+function closeReveal(){
+  if(RUN.state !== "reveal") return;
+  clearTimeout(showReveal._t);
+  $("#reveal").classList.remove("on");
+  RUN.gates.forEach(g => g.el.remove());
+  RUN.gates = [];
+  RUN.state = "playing";
+  spawnGate();
+}
+$("#reveal").addEventListener("pointerdown", e => { e.stopPropagation(); closeReveal(); });
+
+function gameOver(){
+  RUN.state = "over";
+  RUN.gates.forEach(g => g.el.remove()); RUN.gates = [];
+  DB.stats.games++;
+  DB.stats.best = Math.max(DB.stats.best, RUN.score);
+  save();
+  const acc = RUN.answers ? Math.round(RUN.correct / RUN.answers * 100) : 0;
+  $("#ovScore").textContent = RUN.score;
+  $("#ovBest").textContent = DB.stats.best;
+  $("#ovAcc").textContent = acc + "%";
+  $("#ovMax").textContent = RUN.maxCombo;
+  $("#overSub").textContent = RUN.score >= DB.stats.best && RUN.score > 0
+    ? "Новый рекорд. Красиво." : `${RUN.correct} из ${RUN.answers} — неплохо, но словарь ждёт.`;
+  const uniq = [];
+  const seenIds = new Set();
+  for(const w of RUN.missed){ if(!seenIds.has(w.id)){ seenIds.add(w.id); uniq.push(w); } }
+  $("#missBlock").innerHTML = uniq.length
+    ? `<h2>Споткнулся на этих</h2><div class="card" style="padding:0;overflow:hidden">` +
+      uniq.map(w => `<div class="wrow"><div class="col"><div class="en">${esc(w.en)}</div><div class="ru">${esc(w.ru)}</div></div></div>`).join("") +
+      `</div><p class="small" style="margin-bottom:16px">Они вернутся в ближайших забегах — так работает интервальное повторение.</p>`
+    : `<p class="small" style="margin-bottom:16px">Ни одной ошибки по словам. Можно усложнить: 3 ворот или Рус → Англ.</p>`;
+  show("s-over");
+}
+
+/* ---------- input ---------- */
+function setLane(i){
+  RUN.lane = Math.max(0, Math.min(RUN.lanes - 1, i));
+  RUN.targetX = laneX(RUN.lane);
+}
+let touchStart = null;
+wrap.addEventListener("pointerdown", e => {
+  if(RUN.state === "reveal"){ closeReveal(); return; }
+  if(RUN.state !== "playing") return;
+  touchStart = { x: e.clientX, y: e.clientY, t: performance.now() };
+  const rel = e.clientX / RUN.W;
+  setLane(Math.min(RUN.lanes - 1, Math.floor(rel * RUN.lanes)));
+});
+wrap.addEventListener("pointermove", e => {
+  if(RUN.state !== "playing" || !touchStart) return;
+  if(e.buttons === 0 && e.pointerType === "mouse") return;
+  const rel = e.clientX / RUN.W;
+  setLane(Math.min(RUN.lanes - 1, Math.floor(rel * RUN.lanes)));
+});
+wrap.addEventListener("pointerup", () => { touchStart = null; });
+wrap.addEventListener("pointercancel", () => { touchStart = null; });
+window.addEventListener("keydown", e => {
+  if(RUN.state === "reveal" && (e.key === " " || e.key === "Enter")){ closeReveal(); e.preventDefault(); return; }
+  if(RUN.state !== "playing") return;
+  if(e.key === "ArrowLeft" || e.key === "a") setLane(RUN.lane - 1);
+  if(e.key === "ArrowRight" || e.key === "d") setLane(RUN.lane + 1);
+  if(e.key >= "1" && e.key <= "3") setLane(+e.key - 1);
+});
+
+/* ---------- effects ---------- */
+function updHUD(){
+  $("#score").textContent = RUN.score;
+  $("#lives").textContent = "❤︎".repeat(Math.max(0, RUN.lives)) + "♡".repeat(Math.max(0, 3 - RUN.lives));
+  const c = $("#combo");
+  c.textContent = RUN.combo >= 3 ? `комбо ×${RUN.combo}` : "";
+  c.style.fontSize = RUN.combo >= 10 ? "15px" : "12px";
+}
+function toast(text, color){
+  const t = $("#toast");
+  t.textContent = text;
+  t.style.color = color;
+  t.style.top = (RUN.playerY - 60) + "px";
+  t.style.fontSize = "26px";
+  t.style.animation = "none"; void t.offsetWidth;
+  t.style.animation = "floatUp .8s ease-out forwards";
+}
+function burst(x, y, color, n){
+  for(let i = 0; i < n; i++){
+    const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 260;
+    RUN.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60, life: .6 + Math.random() * .4, t: 0, c: color, r: 2 + Math.random() * 3 });
+  }
+}
+let voice = null;
+function pickVoice(){
+  if(!("speechSynthesis" in window)) return;
+  const vs = speechSynthesis.getVoices();
+  voice = vs.find(v => /en[-_]US/i.test(v.lang) && /google|samantha|natural/i.test(v.name))
+       || vs.find(v => /^en/i.test(v.lang)) || null;
+}
+if("speechSynthesis" in window){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+function speak(text){
+  if(!DB.settings.tts || !("speechSynthesis" in window)) return;
+  try{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-US"; u.rate = .95; if(voice) u.voice = voice;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+/* ---------- loop ---------- */
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(.05, (now - last) / 1000);
+  last = now;
+
+  if(RUN.state === "playing"){
+    // Difficulty is expressed as reaction time, not raw px/s, so the game feels
+    // identical on a small phone and a big laptop screen.
+    const travel = RUN.playerY + 18;                                  // spawn -> decision line
+    const react = Math.max(1.25, 2.20 - Math.min(RUN.combo, 20) * 0.048);
+    RUN.speed = travel / react;
+    RUN.road += RUN.speed * dt;
+
+    for(let i = RUN.gates.length - 1; i >= 0; i--){
+      const g = RUN.gates[i];
+      g.y += RUN.speed * dt;
+      g.el.style.transform = `translateY(${g.y}px)`;
+      if(!g.resolved && g.y + g.h >= RUN.playerY) resolveGate(g);
+      if(g.y > RUN.H + 40){ g.el.remove(); RUN.gates.splice(i, 1); }
+    }
+    // player lerp
+    RUN.px += (RUN.targetX - RUN.px) * Math.min(1, dt * 18);
+  } else if(RUN.state === "reveal"){
+    RUN.road += 60 * dt;
+  }
+
+  if(RUN.state !== "idle" && RUN.state !== "over"){
+    playerEl.style.transform = `translate(${RUN.px}px, ${RUN.playerY}px) rotate(${(RUN.targetX - RUN.px) * .12}deg)`;
+  }
+
+  // shake
+  if(RUN.shakeT > 0){
+    RUN.shakeT -= dt;
+    const m = Math.max(0, RUN.shakeT) * 26;
+    shakeEl.style.transform = `translate(${(Math.random()-.5)*m}px,${(Math.random()-.5)*m}px)`;
+  } else if(shakeEl.style.transform){ shakeEl.style.transform = ""; }
+
+  drawFx(dt);
+  requestAnimationFrame(frame);
+}
+
+function drawFx(dt){
+  if(!RUN.W) return;
+  ctx.clearRect(0, 0, RUN.W, RUN.H);
+  if(RUN.state === "idle" || RUN.state === "over") return;
+
+  // background glow
+  const g = ctx.createLinearGradient(0, 0, 0, RUN.H);
+  g.addColorStop(0, "#0b0f1a");
+  g.addColorStop(.55, "#101830");
+  g.addColorStop(1, "#0a1224");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, RUN.W, RUN.H);
+
+  // lane dividers, scrolling dashes
+  const pad = 12, gap = 10;
+  const cw = (RUN.W - pad * 2 - gap * (RUN.lanes - 1)) / RUN.lanes;
+  ctx.strokeStyle = "rgba(255,255,255,.10)";
+  ctx.lineWidth = 2;
+  const dash = 26, space = 22, off = RUN.road % (dash + space);
+  for(let i = 1; i < RUN.lanes; i++){
+    const x = pad + i * (cw + gap) - gap / 2;
+    ctx.beginPath();
+    for(let y = -dash + off; y < RUN.H; y += dash + space){ ctx.moveTo(x, y); ctx.lineTo(x, y + dash); }
+    ctx.stroke();
+  }
+  // outer rails
+  ctx.strokeStyle = "rgba(34,227,255,.16)";
+  ctx.beginPath();
+  ctx.moveTo(pad - 4, 0); ctx.lineTo(pad - 4, RUN.H);
+  ctx.moveTo(RUN.W - pad + 4, 0); ctx.lineTo(RUN.W - pad + 4, RUN.H);
+  ctx.stroke();
+
+  // player trail glow line
+  ctx.fillStyle = "rgba(34,227,255,.07)";
+  ctx.fillRect(RUN.px - 24, 0, 48, RUN.H);
+
+  // particles
+  for(let i = RUN.parts.length - 1; i >= 0; i--){
+    const p = RUN.parts[i];
+    p.t += dt;
+    if(p.t >= p.life){ RUN.parts.splice(i, 1); continue; }
+    p.vy += 620 * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    ctx.globalAlpha = 1 - p.t / p.life;
+    ctx.fillStyle = p.c;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.283); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+document.addEventListener("visibilitychange", () => {
+  if(document.hidden && RUN.state === "playing"){ stopRun(); show("s-menu"); }
+});
+
+/* ---------- PWA ---------- */
+const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+if(!standalone && isIOS){
+  const h = $("#installHint");
+  if(h) h.style.display = "";
+}
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(e => console.warn("sw", e));
+  });
+}
+
+/* ---------- boot ---------- */
+resize();
+renderMenu();
+requestAnimationFrame(frame);
+window.WR = { DB, save, parseList, pickWord, RUN, startRun, setLane, resolveGate };
+</script>
+</body>
+</html>
