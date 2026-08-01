@@ -132,12 +132,13 @@ input[type=file]{display:none}
   backdrop-filter:blur(3px)}
 #stopBtn .ic{font-size:19px;line-height:1}
 #stopBtn.off{opacity:.25;border-color:var(--line);background:rgba(255,255,255,.04)}
+#stopBtn.held{background:var(--cyan);color:#04121a;border-color:var(--cyan)}
 #stopBtn:active{transform:scale(.93)}
 
 #freeze{position:absolute;inset:0;z-index:5;display:none;align-items:center;justify-content:center;
   pointer-events:none;background:rgba(34,227,255,.10)}
 #freeze.on{display:flex}
-#freeze b{font-size:70px;font-weight:900;color:var(--cyan);text-shadow:0 0 40px rgba(34,227,255,.7)}
+#freeze b{font-size:56px;font-weight:900;color:var(--cyan);text-shadow:0 0 40px rgba(34,227,255,.7)}
 
 #choice{position:absolute;inset:0;z-index:9;display:none;flex-direction:column;align-items:center;
   justify-content:center;gap:6px;padding:24px;text-align:center;background:rgba(8,10,20,.93);backdrop-filter:blur(6px)}
@@ -317,7 +318,7 @@ code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:5px;font-siz
       <div id="promptSub"></div>
     </div>
     <div id="levelBanner"><div class="n"></div><div class="t">уровень</div></div>
-    <div id="freeze"><b id="freezeN">2</b></div>
+    <div id="freeze"><b id="freezeN">0.0</b></div>
     <button id="stopBtn"><span class="ic">⏸</span><span id="stopN">0</span></button>
     <div id="choice">
       <div class="lv">уровень</div>
@@ -327,7 +328,7 @@ code{background:rgba(255,255,255,.08);padding:1px 5px;border-radius:5px;font-siz
         <button class="cbtn" data-pick="life"><span class="ic">❤︎</span>
           <span class="nm">+1 жизнь</span><span class="ds">запас прочности</span></button>
         <button class="cbtn" data-pick="stop"><span class="ic">⏸</span>
-          <span class="nm">+1 стоп</span><span class="ds">заморозить ворота на 3 секунды, когда нужно подумать</span></button>
+          <span class="nm">+2 стопа</span><span class="ds">держишь кнопку — ворота стоят, отпустил — поехали</span></button>
       </div>
     </div>
     <div id="toast"></div>
@@ -420,6 +421,7 @@ const DEFAULTS = {
   prepSig: "", prepAt: "",   // signature of prepositions.txt
   win: { words: 3.0, preps: 3.6 },   // learned reaction window per deck, seconds
   ach: {},                   // achievement id -> date unlocked
+  history: [],               // last runs: {d,m,s,c,a,l,x}
   settings: { dir: "ru2en", lanes: 2, tts: true, mode: "words", diff: "normal", showRu: true },
   stats: { best: 0, bestPreps: 0, bestMixed: 0, games: 0, answers: 0, correct: 0, days: 0, lastDay: "", cleanRuns: 0 }
 };
@@ -549,6 +551,7 @@ function load(){
       stats: Object.assign({}, DEFAULTS.stats, d.stats || {}),
       turns: Object.assign({}, DEFAULTS.turns, d.turns || {}),
       ach: d.ach || {},
+      history: Array.isArray(d.history) ? d.history : [],
       win: Object.assign({}, DEFAULTS.win, d.win || {}),
       preps: Array.isArray(d.preps) ? d.preps : []
     });
@@ -756,14 +759,18 @@ function pickFrom(kind){
   const pool = poolOf(kind);
   if(!pool.length) return null;
   const t = turnOf(kind);
-  const fresh = x => !RUN.recent.includes(x.id);          // avoid immediate repeats
-  const pickBest = list => {
-    const clean = list.filter(fresh);
-    return (clean.length ? clean : list);
-  };
 
-  let unseen = pool.filter(w => !w.seen);
-  let due = pool.filter(w => w.seen && w.due <= t);
+  /* A run is a march through the deck: nothing already asked comes back until the
+     whole pool has been used up. Repeats are the job of the *next* run, where the
+     Leitner schedule decides what is due. */
+  let work = pool.filter(w => !RUN.used.has(w.id));
+  if(!work.length){ RUN.used.clear(); work = pool; }      // lap finished — start over
+
+  const fresh = x => !RUN.recent.includes(x.id);
+  const pickBest = list => { const clean = list.filter(fresh); return clean.length ? clean : list; };
+
+  let unseen = work.filter(w => !w.seen);
+  let due = work.filter(w => w.seen && w.due <= t);
   const learning = pool.filter(w => w.seen && w.box < 3).length;
 
   let w = null;
@@ -778,7 +785,7 @@ function pickFrom(kind){
     const c = pickBest(unseen);
     w = c[Math.floor(Math.random() * c.length)]; w.seen = true;
   } else {
-    const c = pickBest(pool).slice().sort((a, b) => a.due - b.due);
+    const c = pickBest(work).slice().sort((a, b) => a.due - b.due);
     w = c[Math.floor(Math.random() * Math.min(5, c.length))];
   }
   return w;
@@ -939,7 +946,7 @@ function diffHint(){
                           : `${c.words.toFixed(1)} с на слово`;
   return `<b>${t}</b> · старт с ${c.lives} ${plural(c.lives,"жизнью","жизнями","жизнями")}. ` +
          `Скорость не растёт по ходу забега — вместо этого каждые ${LEVEL_EVERY} правильных ` +
-         `даётся выбор награды. Длинным фразам добавляется фора на чтение, скорость дороги при этом одна и та же.`;
+         `даёшь выбор: +1 жизнь или +2 стопа. Длинным фразам добавляется фора на чтение, скорость дороги при этом одна и та же.`;
 }
 
 $("#modeSeg").addEventListener("click", e => {
@@ -1077,6 +1084,22 @@ function deckStats(pool, title){
       <div class="small"><span class="ok">■</span> знаю ${nKnow} · <span class="warn">■</span> учу ${nLearn} · <span class="err">■</span> трудные ${nHard} · ■ не начато ${nNew}</div>
     </div>`;
 }
+const MODE_NAME = { words: "Слова", preps: "Предлоги", mixed: "Микс" };
+function runHistory(){
+  const h = DB.history.slice(0, 10);
+  if(!h.length) return "";
+  const max = Math.max(...h.map(r => r.s), 1);
+  return `<h2>Последние забеги</h2><div class="card" style="padding:0;overflow:hidden">` +
+    h.map(r => {
+      const acc = r.a ? Math.round(r.c / r.a * 100) : 0;
+      return `<div class="wrow">
+        <div class="col">
+          <div class="en">${r.s} <span style="font-weight:500;color:var(--dim);font-size:13px">очков · ${MODE_NAME[r.m] || r.m}</span></div>
+          <div class="bar" style="margin:6px 0 0"><i style="width:${r.s / max * 100}%;background:var(--cyan)"></i></div>
+          <div class="ru" style="margin-top:4px">${r.d} · ${r.c}/${r.a} (${acc}%) · уровень ${r.l}${r.x ? ` · освоено ${r.x}` : ""}</div>
+        </div></div>`;
+    }).join("") + `</div>`;
+}
 function renderStats(){
   const acc = DB.stats.answers ? Math.round(DB.stats.correct / DB.stats.answers * 100) : 0;
   const hardW = DB.words.filter(x => x.err > 0).sort((a, b) => (b.err - a.err) || (a.box - b.box)).slice(0, 10);
@@ -1095,6 +1118,7 @@ function renderStats(){
     <div class="card"><div class="small">Забегов: <b>${DB.stats.games}</b> · Ответов: <b>${DB.stats.answers}</b>
       · Рекорды: слова <b>${DB.stats.best}</b>, предлоги <b>${DB.stats.bestPreps}</b>, микс <b>${DB.stats.bestMixed || 0}</b></div></div>
 
+    ${runHistory()}
     <h2>Награды <span class="small">${got} из ${ACHS.length}</span></h2>
     <div class="card" style="padding:0;overflow:hidden">
       ${ACHS.map(a => `<div class="ach ${DB.ach[a.id] ? "got" : "locked"}">
@@ -1128,8 +1152,8 @@ const RUN = {
   score: 0, combo: 0, maxCombo: 0, lives: 3, level: 1,
   answers: 0, correct: 0, missed: [], revenge: false,
   parts: [], shakeT: 0, lastMoveT: 0, window: 3, fatal: false,
-  recent: [], byKind: { words: {a:0,c:0}, preps: {a:0,c:0} },
-  stops: 0, frozen: 0, mastered: 0
+  recent: [], used: new Set(), byKind: { words: {a:0,c:0}, preps: {a:0,c:0} },
+  stops: 0, frozen: false, frozenAt: 0, mastered: 0
 };
 
 function resize(){
@@ -1212,14 +1236,14 @@ function startRun(){
   RUN.answers = 0; RUN.correct = 0; RUN.missed = []; RUN.revenge = false;
   RUN.shakeT = 0; RUN.lastMoveT = 0; RUN.fatal = false; RUN.recent = [];
   RUN.byKind = { words: {a:0,c:0}, preps: {a:0,c:0} };
-  RUN.stops = 0; RUN.frozen = 0; RUN.mastered = 0;
+  RUN.stops = 0; RUN.frozen = false; RUN.mastered = 0; RUN.used = new Set();
   $("#reveal").classList.remove("on");
   updHUD();
   spawnGate();
 }
 function stopRun(){
+  holdStop(false);
   RUN.state = "idle";
-  RUN.frozen = 0;
   $("#freeze").classList.remove("on");
   $("#choice").classList.remove("on");
   $("#promptSub").textContent = "";
@@ -1275,6 +1299,7 @@ function spawnGate(){
   RUN.gates.push(g);
   RUN.lastMoveT = 0;
   RUN.window = reactionWindow(item);
+  RUN.used.add(item.id);
   RUN.recent.push(item.id);
   const keep = Math.min(NO_REPEAT, Math.max(2, Math.floor(D.items().length / 3)));
   while(RUN.recent.length > keep) RUN.recent.shift();
@@ -1351,8 +1376,10 @@ function showChoice(n){
   $("#choice").classList.add("on");
 }
 function pickReward(kind){
+  // Deliberately lopsided: one life saves one mistake, two stops save two
+  // questions and keep the combo — otherwise the choice has no content.
   if(kind === "life") RUN.lives = Math.min(MAX_LIVES, RUN.lives + 1);
-  else RUN.stops++;
+  else RUN.stops += 2;
   $("#choice").classList.remove("on");
   RUN.state = "playing";
   updHUD();
@@ -1364,15 +1391,29 @@ $("#choice").addEventListener("click", e => {
   if(b && RUN.state === "choice") pickReward(b.dataset.pick);
 });
 
-// Freeze the road for a few seconds without spending a life.
-function useStop(){
-  if(RUN.state !== "playing" || RUN.stops < 1 || RUN.frozen > 0) return;
-  RUN.stops--;
-  RUN.frozen = 3;
-  $("#freeze").classList.add("on");
-  updHUD();
+/* Hold to freeze, release to run. One stop = one hold of any length, so the cost
+   is "I spent a stop on this question", not "I bought N seconds". */
+function holdStop(on){
+  if(on){
+    if(RUN.state !== "playing" || RUN.stops < 1 || RUN.frozen) return;
+    RUN.stops--;
+    RUN.frozen = true;
+    RUN.frozenAt = performance.now();
+    $("#freeze").classList.add("on");
+    $("#stopBtn").classList.add("held");
+    if(navigator.vibrate) try{ navigator.vibrate(15); }catch(e){}
+    updHUD();
+  } else {
+    if(!RUN.frozen) return;
+    RUN.frozen = false;
+    $("#freeze").classList.remove("on");
+    $("#stopBtn").classList.remove("held");
+  }
 }
-$("#stopBtn").addEventListener("pointerdown", e => { e.stopPropagation(); useStop(); });
+$("#stopBtn").addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); holdStop(true); });
+window.addEventListener("pointerup", () => holdStop(false));
+window.addEventListener("pointercancel", () => holdStop(false));
+window.addEventListener("blur", () => holdStop(false));
 
 function showLevel(n){
   const b = $("#levelBanner");
@@ -1412,6 +1453,7 @@ function closeReveal(){
 $("#reveal").addEventListener("pointerdown", e => { e.stopPropagation(); closeReveal(); });
 
 function gameOver(){
+  holdStop(false);
   RUN.state = "over";
   RUN.gates.forEach(g => g.el.remove()); RUN.gates = [];
   const D = deck();
@@ -1420,6 +1462,11 @@ function gameOver(){
   DB.stats.games++;
   DB.stats[bestKey] = Math.max(DB.stats[bestKey] || 0, RUN.score);
   if(RUN.answers >= 10 && RUN.correct === RUN.answers) DB.stats.cleanRuns++;
+  DB.history.unshift({
+    d: new Date().toISOString().slice(0, 10), m: mode, s: RUN.score,
+    c: RUN.correct, a: RUN.answers, l: RUN.level, x: RUN.mastered
+  });
+  if(DB.history.length > 40) DB.history.length = 40;
   save();
 
   const got = checkAchievements({
@@ -1476,9 +1523,11 @@ wrap.addEventListener("pointermove", e => {
 });
 wrap.addEventListener("pointerup", () => { dragging = false; });
 wrap.addEventListener("pointercancel", () => { dragging = false; });
+window.addEventListener("keyup", e => { if(e.key === " ") holdStop(false); });
 window.addEventListener("keydown", e => {
   if(RUN.state === "reveal" && (e.key === " " || e.key === "Enter")){ closeReveal(); e.preventDefault(); return; }
   if(RUN.state !== "playing") return;
+  if(e.key === " "){ e.preventDefault(); holdStop(true); return; }
   if(e.key === "ArrowLeft" || e.key === "a") setLane(RUN.lane - 1);
   if(e.key === "ArrowRight" || e.key === "d") setLane(RUN.lane + 1);
   if(e.key >= "1" && e.key <= "3") setLane(+e.key - 1);
@@ -1574,10 +1623,8 @@ function frame(now){
   const dt = Math.min(.05, (now - last) / 1000);
   last = now;
 
-  if(RUN.state === "playing" && RUN.frozen > 0){
-    RUN.frozen = Math.max(0, RUN.frozen - dt);
-    $("#freezeN").textContent = Math.ceil(RUN.frozen);
-    if(RUN.frozen === 0) $("#freeze").classList.remove("on");
+  if(RUN.state === "playing" && RUN.frozen){
+    $("#freezeN").textContent = ((now - RUN.frozenAt) / 1000).toFixed(1);
   } else if(RUN.state === "playing"){
     const travel = RUN.playerY + SPAWN_LEAD;
     RUN.speed = travel / (RUN.window || reactionWindow(null));
@@ -1660,7 +1707,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 /* ---------- PWA + updates ---------- */
-const APP_VERSION = "1.6";
+const APP_VERSION = "1.7";
 $("#verNum").textContent = APP_VERSION;
 
 const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
@@ -1717,7 +1764,7 @@ requestAnimationFrame(frame);
 window.WR = {
   get DB(){ return DB; }, save, parseList, parsePreps, pickItem, RUN, startRun, setLane,
   syncDeck, checkAchievements, ACHS, baseWindow, reactionWindow, deck, resolveGate, spawnGate,
-  extraLead, diffCfg, useStop, pickReward
+  extraLead, diffCfg, holdStop, pickReward, gameOver, updHUD
 };
 </script>
 </body>
